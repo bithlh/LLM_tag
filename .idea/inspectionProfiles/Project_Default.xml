@@ -1,0 +1,35 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyInterpreterInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="false" level="WARNING" enabled_by_default="false">
+      <option name="ignoredPackages">
+        <list>
+          <option value="certifi" />
+          <option value="chardet" />
+          <option value="cycler" />
+          <option value="dataclasses" />
+          <option value="easydict" />
+          <option value="idna" />
+          <option value="imutil" />
+          <option value="kiwisolver" />
+          <option value="matplotlib" />
+          <option value="numpy" />
+          <option value="opencv-python" />
+          <option value="pkg-resources" />
+          <option value="pyparsing" />
+          <option value="python-dateutil" />
+          <option value="pyyaml" />
+          <option value="requests" />
+          <option value="scipy" />
+          <option value="six" />
+          <option value="tqdm" />
+          <option value="typing-extensions" />
+          <option value="urllib3" />
+          <option value="pandas" />
+          <option value="seaborn" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
