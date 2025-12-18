@@ -11,42 +11,15 @@
         <header>
             <h1>🏷️ 图片标签筛选系统</h1>
             <div class="header-stats">
-                <span id="progress">总图片: <strong id="totalCount">0</strong></span>
+                <span id="progress">总组数: <strong id="totalCount">0</strong></span>
                 <button id="exportBtn" class="btn btn-secondary">导出数据</button>
             </div>
         </header>
 
         <main>
-            <div class="sidebar">
-                <h2>图片列表</h2>
-                <div id="imageList" class="image-list"></div>
-            </div>
-
-            <div class="content">
-                <div class="image-viewer">
-                    <div id="imageContainer" class="image-container">
-                        <p class="placeholder">请选择一张图片开始标注</p>
-                    </div>
-                </div>
-
-                <div class="tag-panel">
-                    <div class="tag-header">
-                        <h2>标签管理</h2>
-                        <div class="tag-stats">
-                            <span id="tagCount">共 0 个标签</span>
-                        </div>
-                    </div>
-
-                    <div id="tagContainer" class="tag-container">
-                        <p class="placeholder">暂无标签</p>
-                    </div>
-
-                    <div class="tag-actions">
-                        <div class="add-tag-form">
-                            <input type="text" id="newTagInput" placeholder="添加新标签..." />
-                            <button id="addTagBtn" class="btn btn-primary">添加</button>
-                        </div>
-                    </div>
+            <div class="groups-container">
+                <div id="groupsContent" class="groups-content">
+                    <p class="placeholder">加载中...</p>
                 </div>
             </div>
         </main>

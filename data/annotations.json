@@ -1,74 +1,86 @@
 {
-  "images": [
+  "groups": [
     {
       "id": 1,
-      "filename": "sample1.jpg",
-      "tags": [
-        "美女",
-        "城市",
-        "亚洲"
+      "images": [
+        {
+          "filename": "sample1.jpg",
+          "id": 1
+        },
+        {
+          "filename": "sample2.jpg",
+          "id": 2
+        }
       ],
-      "reviewed": true,
-      "review_time": "2025-12-17T10:59:45.749229"
-    },
-    {
-      "id": 2,
-      "filename": "sample2.jpg",
       "tags": [
-        "美女",
+        "412",
         "哈哈",
-        "412"
-      ],
-      "reviewed": true,
-      "review_time": "2025-12-17T11:20:20.689073"
-    },
-    {
-      "id": 3,
-      "filename": "mc.png",
-      "tags": [
-        "守岸人",
-        "好看",
-        "21"
-      ],
-      "reviewed": true,
-      "review_time": "2025-12-17T11:20:27.450190"
-    },
-    {
-      "id": 4,
-      "filename": "tianxiwei.png",
-      "tags": [
-        "草地",
-        "好看",
+        "美女",
+        "亚洲",
+        "城市",
         "是",
-        "123\\"
+        "是31"
       ],
       "reviewed": true,
-      "review_time": "2025-12-17T11:20:29.388782"
-    },
-    {
-      "id": 5,
-      "filename": "Snipaste_2025-07-11_20-30-50.png",
-      "tags": [
-        "非洲之心",
-        "额2额2"
-      ]
-    },
-    {
-      "id": 6,
-      "filename": "Snipaste_2025-07-11_20-31-17.png",
-      "tags": [],
-      "primary_category": "",
       "modified": true
     },
     {
-      "id": 7,
-      "filename": "Snipaste_2025-07-11_20-32-04.png",
-      "tags": []
+      "id": 2,
+      "images": [
+        {
+          "filename": "mc.png",
+          "id": 3
+        },
+        {
+          "filename": "tianxiwei.png",
+          "id": 4
+        }
+      ],
+      "tags": [
+        "是",
+        "好看",
+        "守岸人",
+        "123\\",
+        "21",
+        "草地"
+      ],
+      "reviewed": true,
+      "modified": false
     },
     {
-      "id": 8,
-      "filename": "Snipaste_2025-07-11_20-32-42.png",
-      "tags": []
+      "id": 3,
+      "images": [
+        {
+          "filename": "Snipaste_2025-07-11_20-30-50.png",
+          "id": 5
+        },
+        {
+          "filename": "Snipaste_2025-07-11_20-31-17.png",
+          "id": 6
+        }
+      ],
+      "tags": [
+        "非洲之心",
+        "额2额2"
+      ],
+      "reviewed": false,
+      "modified": true
+    },
+    {
+      "id": 4,
+      "images": [
+        {
+          "filename": "Snipaste_2025-07-11_20-32-04.png",
+          "id": 7
+        },
+        {
+          "filename": "Snipaste_2025-07-11_20-32-42.png",
+          "id": 8
+        }
+      ],
+      "tags": [],
+      "reviewed": false,
+      "modified": false
     }
   ]
 }

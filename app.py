@@ -19,7 +19,7 @@ os.makedirs(IMAGE_FOLDER, exist_ok=True)
 def init_sample_data():
     if not os.path.exists(DATA_FILE):
         sample_data = {
-            "images": []
+            "groups": []
         }
         save_data(sample_data)
 
@@ -28,7 +28,7 @@ def init_sample_data():
 
 
 def scan_and_add_images():
-    """扫描images目录，自动添加新发现的图片"""
+    """扫描images目录，自动添加新发现的图片并分组"""
     try:
         # 获取所有图片文件
         image_files = []
@@ -39,28 +39,49 @@ def scan_and_add_images():
 
         # 加载现有数据
         data = load_data()
-        existing_filenames = {img['filename'] for img in data['images']}
+
+        # 收集所有现有图片文件名
+        existing_filenames = set()
+        for group in data.get('groups', []):
+            for img in group.get('images', []):
+                existing_filenames.add(img['filename'])
 
         # 获取当前最大ID
-        max_id = max((img['id'] for img in data['images']), default=0)
+        max_id = 0
+        for group in data.get('groups', []):
+            for img in group.get('images', []):
+                max_id = max(max_id, img.get('id', 0))
 
-        # 添加新发现的图片
-        new_images_added = 0
-        for filename in image_files:
-            if filename not in existing_filenames:
+        # 找出新图片
+        new_files = [f for f in image_files if f not in existing_filenames]
+
+        if not new_files:
+            return
+
+        # 将新图片两两分组添加到现有数据中
+        new_groups_added = 0
+        for i in range(0, len(new_files), 2):
+            group_images = new_files[i:i+2]
+            group_imgs = []
+            for filename in group_images:
                 max_id += 1
-                new_image = {
+                group_imgs.append({
                     "id": max_id,
-                    "filename": filename,
-                    "tags": []
-                }
-                data['images'].append(new_image)
-                new_images_added += 1
+                    "filename": filename
+                })
+
+            new_group = {
+                "id": len(data.get('groups', [])) + new_groups_added + 1,
+                "images": group_imgs,
+                "tags": []
+            }
+            data['groups'].append(new_group)
+            new_groups_added += 1
 
         # 保存更新后的数据
-        if new_images_added > 0:
+        if new_groups_added > 0:
             save_data(data)
-            print(f"自动添加了 {new_images_added} 张新图片到数据库")
+            print(f"自动添加了 {len(new_files)} 张新图片，组成 {new_groups_added} 个新组")
 
     except Exception as e:
         print(f"扫描图片目录时出错: {e}")
@@ -70,7 +91,11 @@ def load_data():
     """加载标注数据"""
     try:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+            # 确保数据结构兼容
+            if 'groups' not in data:
+                data['groups'] = []
+            return data
     except FileNotFoundError:
         init_sample_data()
         return load_data()
@@ -88,77 +113,79 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/api/images', methods=['GET'])
-def get_images():
-    """获取所有图片和标签信息"""
+@app.route('/api/groups', methods=['GET'])
+def get_groups():
+    """获取所有图片组和标签信息"""
     # 确保扫描到最新的图片
     scan_and_add_images()
     data = load_data()
     return jsonify(data)
 
 
-@app.route('/api/images/<int:image_id>', methods=['GET'])
-def get_image(image_id):
-    """获取单个图片信息"""
+@app.route('/api/groups/<int:group_id>', methods=['GET'])
+def get_group(group_id):
+    """获取单个组信息"""
     data = load_data()
-    for img in data['images']:
-        if img['id'] == image_id:
-            return jsonify(img)
-    return jsonify({'error': 'Image not found'}), 404
+    for group in data.get('groups', []):
+        if group['id'] == group_id:
+            return jsonify(group)
+    return jsonify({'error': 'Group not found'}), 404
 
 
-@app.route('/api/images/<int:image_id>/tags', methods=['DELETE'])
-def delete_tag(image_id):
-    """删除指定图片的某个标签"""
+@app.route('/api/groups/<int:group_id>/tags', methods=['DELETE'])
+def delete_tag(group_id):
+    """删除指定组的某个标签"""
     tag = request.json.get('tag')
     if not tag:
         return jsonify({'error': 'Tag not provided'}), 400
 
     data = load_data()
-    for img in data['images']:
-        if img['id'] == image_id:
-            if tag in img['tags']:
-                img['tags'].remove(tag)
+    for group in data.get('groups', []):
+        if group['id'] == group_id:
+            if tag in group.get('tags', []):
+                group['tags'].remove(tag)
+                group['modified'] = True
                 save_data(data)
                 return jsonify({
                     'success': True,
                     'message': f'Tag "{tag}" removed',
-                    'remaining_tags': img['tags']
+                    'remaining_tags': group['tags']
                 })
             else:
                 return jsonify({'error': 'Tag not found'}), 404
 
-    return jsonify({'error': 'Image not found'}), 404
+    return jsonify({'error': 'Group not found'}), 404
 
 
-@app.route('/api/images/<int:image_id>/tags', methods=['POST'])
-def add_tag(image_id):
+@app.route('/api/groups/<int:group_id>/tags', methods=['POST'])
+def add_tag(group_id):
     """添加新标签"""
     tag = request.json.get('tag')
     if not tag:
         return jsonify({'error': 'Tag not provided'}), 400
 
     data = load_data()
-    for img in data['images']:
-        if img['id'] == image_id:
-            if tag not in img['tags']:
-                img['tags'].append(tag)
+    for group in data.get('groups', []):
+        if group['id'] == group_id:
+            if tag not in group.get('tags', []):
+                group['tags'].append(tag)
+                group['modified'] = True
                 save_data(data)
                 return jsonify({
                     'success': True,
                     'message': f'Tag "{tag}" added',
-                    'tags': img['tags']
+                    'tags': group['tags']
                 })
             else:
                 return jsonify({'error': 'Tag already exists'}), 400
 
-    return jsonify({'error': 'Image not found'}), 404
+    return jsonify({'error': 'Group not found'}), 404
 
 
 
 
-@app.route('/api/images/<int:image_id>/tags/edit', methods=['PUT'])
-def edit_tag(image_id):
+@app.route('/api/groups/<int:group_id>/tags/edit', methods=['PUT'])
+def edit_tag(group_id):
     """编辑标签"""
     old_tag = request.json.get('old_tag')
     new_tag = request.json.get('new_tag')
@@ -167,21 +194,21 @@ def edit_tag(image_id):
         return jsonify({'error': 'Both old_tag and new_tag are required'}), 400
 
     data = load_data()
-    for img in data['images']:
-        if img['id'] == image_id:
-            if old_tag in img['tags']:
-                img['tags'] = [new_tag if tag == old_tag else tag for tag in img['tags']]
-                img['modified'] = True
+    for group in data.get('groups', []):
+        if group['id'] == group_id:
+            if old_tag in group.get('tags', []):
+                group['tags'] = [new_tag if tag == old_tag else tag for tag in group['tags']]
+                group['modified'] = True
                 save_data(data)
                 return jsonify({
                     'success': True,
                     'message': f'Tag "{old_tag}" changed to "{new_tag}"',
-                    'tags': img['tags']
+                    'tags': group['tags']
                 })
             else:
                 return jsonify({'error': 'Old tag not found'}), 404
 
-    return jsonify({'error': 'Image not found'}), 404
+    return jsonify({'error': 'Group not found'}), 404
 
 
 @app.route('/api/export', methods=['GET'])
@@ -233,7 +260,7 @@ def allowed_file(filename):
 
 @app.route('/api/import', methods=['POST'])
 def import_data():
-    """导入JSON数据"""
+    """导入JSON数据并自动分组"""
     try:
         import_data = request.get_json()
         if not import_data or 'images' not in import_data:
@@ -241,46 +268,63 @@ def import_data():
 
         # 合并导入的数据
         data = load_data()
-        existing_ids = {img['id'] for img in data['images']}
-        max_id = max(existing_ids) if existing_ids else 0
 
-        imported = 0
+        # 收集现有图片ID
+        existing_image_ids = set()
+        for group in data.get('groups', []):
+            for img in group.get('images', []):
+                existing_image_ids.add(img['id'])
+
+        # 获取当前最大ID
+        max_id = 0
+        for group in data.get('groups', []):
+            for img in group.get('images', []):
+                max_id = max(max_id, img.get('id', 0))
+
+        # 收集需要导入的图片
+        new_images = []
         for img in import_data['images']:
             if 'filename' in img:
-                if img.get('id') and img['id'] not in existing_ids:
+                if img.get('id') and img['id'] not in existing_image_ids:
                     # 保留原有ID
-                    new_img = {
+                    new_images.append({
                         'id': img['id'],
                         'filename': img['filename'],
                         'tags': img.get('tags', []),
-                        'primary_category': img.get('primary_category', ''),
-                        'confidence': img.get('confidence', []),
-                        'attributes': img.get('attributes', {'通用特征': {}, '专属特征': {}}),
-                        'video_description': img.get('video_description', ''),
-                        'reasoning': img.get('reasoning', ''),
                         'reviewed': img.get('reviewed', False)
-                    }
-                    data['images'].append(new_img)
-                    imported += 1
+                    })
                 elif not img.get('id'):
                     # 分配新ID
                     max_id += 1
-                    new_img = {
+                    new_images.append({
                         'id': max_id,
                         'filename': img['filename'],
                         'tags': img.get('tags', []),
-                        'primary_category': img.get('primary_category', ''),
-                        'confidence': img.get('confidence', []),
-                        'attributes': img.get('attributes', {'通用特征': {}, '专属特征': {}}),
-                        'video_description': img.get('video_description', ''),
-                        'reasoning': img.get('reasoning', ''),
                         'reviewed': img.get('reviewed', False)
-                    }
-                    data['images'].append(new_img)
-                    imported += 1
+                    })
+
+        # 将新图片两两分组
+        imported_groups = 0
+        for i in range(0, len(new_images), 2):
+            group_images = new_images[i:i+2]
+
+            # 合并tags
+            group_tags = []
+            for img in group_images:
+                group_tags.extend(img.get('tags', []))
+            group_tags = list(set(group_tags))  # 去重
+
+            new_group = {
+                'id': len(data.get('groups', [])) + imported_groups + 1,
+                'images': [{'id': img['id'], 'filename': img['filename']} for img in group_images],
+                'tags': group_tags,
+                'reviewed': any(img.get('reviewed', False) for img in group_images)
+            }
+            data['groups'].append(new_group)
+            imported_groups += 1
 
         save_data(data)
-        return jsonify({'imported': imported})
+        return jsonify({'imported': len(new_images), 'groups_created': imported_groups})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -288,7 +332,7 @@ def import_data():
 
 @app.route('/api/import/file', methods=['POST'])
 def import_from_file():
-    """从文件导入标注数据"""
+    """从文件导入标注数据并自动分组"""
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
@@ -309,46 +353,63 @@ def import_from_file():
 
         # 合并导入的数据
         data = load_data()
-        existing_ids = {img['id'] for img in data['images']}
-        max_id = max(existing_ids) if existing_ids else 0
 
-        imported = 0
+        # 收集现有图片ID
+        existing_image_ids = set()
+        for group in data.get('groups', []):
+            for img in group.get('images', []):
+                existing_image_ids.add(img['id'])
+
+        # 获取当前最大ID
+        max_id = 0
+        for group in data.get('groups', []):
+            for img in group.get('images', []):
+                max_id = max(max_id, img.get('id', 0))
+
+        # 收集需要导入的图片
+        new_images = []
         for img in import_data['images']:
             if 'filename' in img:
-                if img.get('id') and img['id'] not in existing_ids:
+                if img.get('id') and img['id'] not in existing_image_ids:
                     # 保留原有ID
-                    new_img = {
+                    new_images.append({
                         'id': img['id'],
                         'filename': img['filename'],
                         'tags': img.get('tags', []),
-                        'primary_category': img.get('primary_category', ''),
-                        'confidence': img.get('confidence', []),
-                        'attributes': img.get('attributes', {'通用特征': {}, '专属特征': {}}),
-                        'video_description': img.get('video_description', ''),
-                        'reasoning': img.get('reasoning', ''),
                         'reviewed': img.get('reviewed', False)
-                    }
-                    data['images'].append(new_img)
-                    imported += 1
+                    })
                 elif not img.get('id'):
                     # 分配新ID
                     max_id += 1
-                    new_img = {
+                    new_images.append({
                         'id': max_id,
                         'filename': img['filename'],
                         'tags': img.get('tags', []),
-                        'primary_category': img.get('primary_category', ''),
-                        'confidence': img.get('confidence', []),
-                        'attributes': img.get('attributes', {'通用特征': {}, '专属特征': {}}),
-                        'video_description': img.get('video_description', ''),
-                        'reasoning': img.get('reasoning', ''),
                         'reviewed': img.get('reviewed', False)
-                    }
-                    data['images'].append(new_img)
-                    imported += 1
+                    })
+
+        # 将新图片两两分组
+        imported_groups = 0
+        for i in range(0, len(new_images), 2):
+            group_images = new_images[i:i+2]
+
+            # 合并tags
+            group_tags = []
+            for img in group_images:
+                group_tags.extend(img.get('tags', []))
+            group_tags = list(set(group_tags))  # 去重
+
+            new_group = {
+                'id': len(data.get('groups', [])) + imported_groups + 1,
+                'images': [{'id': img['id'], 'filename': img['filename']} for img in group_images],
+                'tags': group_tags,
+                'reviewed': any(img.get('reviewed', False) for img in group_images)
+            }
+            data['groups'].append(new_group)
+            imported_groups += 1
 
         save_data(data)
-        return jsonify({'imported': imported})
+        return jsonify({'imported': len(new_images), 'groups_created': imported_groups})
 
     except json.JSONDecodeError:
         return jsonify({'error': 'Invalid JSON format'}), 400
@@ -360,17 +421,18 @@ def import_from_file():
 def get_statistics():
     """获取统计信息"""
     data = load_data()
-    images = data['images']
+    groups = data.get('groups', [])
 
     # 计算基础统计
-    total_images = len(images)
-    modified_images = len([img for img in images if img.get('modified', False)])
+    total_groups = len(groups)
+    total_images = sum(len(group.get('images', [])) for group in groups)
+    modified_groups = len([group for group in groups if group.get('modified', False)])
 
     # 计算标签统计
     tag_counts = {}
     total_tags = 0
-    for img in images:
-        for tag in img.get('tags', []):
+    for group in groups:
+        for tag in group.get('tags', []):
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
             total_tags += 1
 
@@ -378,8 +440,9 @@ def get_statistics():
     tag_distribution = dict(sorted(tag_counts.items(), key=lambda x: x[1], reverse=True))
 
     return jsonify({
+        'total_groups': total_groups,
         'total_images': total_images,
-        'modified_images': modified_images,
+        'modified_groups': modified_groups,
         'total_tags': total_tags,
         'tag_distribution': tag_distribution
     })
@@ -395,16 +458,16 @@ def batch_delete_tag():
     data = load_data()
     deleted_count = 0
 
-    for img in data['images']:
-        if tag in img.get('tags', []):
-            img['tags'].remove(tag)
-            img['modified'] = True
+    for group in data.get('groups', []):
+        if tag in group.get('tags', []):
+            group['tags'].remove(tag)
+            group['modified'] = True
             deleted_count += 1
 
     save_data(data)
 
     return jsonify({
-        'message': f'从 {deleted_count} 张图片中删除了标签 "{tag}"'
+        'message': f'从 {deleted_count} 个组中删除了标签 "{tag}"'
     })
 
 
@@ -420,16 +483,16 @@ def batch_replace_tag():
     data = load_data()
     replaced_count = 0
 
-    for img in data['images']:
-        if old_tag in img.get('tags', []):
-            img['tags'] = [new_tag if t == old_tag else t for t in img['tags']]
-            img['modified'] = True
+    for group in data.get('groups', []):
+        if old_tag in group.get('tags', []):
+            group['tags'] = [new_tag if t == old_tag else t for t in group['tags']]
+            group['modified'] = True
             replaced_count += 1
 
     save_data(data)
 
     return jsonify({
-        'message': f'在 {replaced_count} 张图片中将 "{old_tag}" 替换为 "{new_tag}"'
+        'message': f'在 {replaced_count} 个组中将 "{old_tag}" 替换为 "{new_tag}"'
     })
 
 
