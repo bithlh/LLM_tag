@@ -13,6 +13,7 @@
             <div class="header-stats">
                 <span id="progress">总组数: <strong id="totalCount">0</strong></span>
                 <button id="exportBtn" class="btn btn-secondary">导出数据</button>
+                <button id="importBtn" class="btn btn-primary">导入数据</button>
             </div>
         </header>
 
@@ -23,6 +24,65 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- 导入弹窗 -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>导入数据</h2>
+            
+            <!-- 标签页切换 -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="json">JSON文本导入</button>
+                <button class="tab-btn" data-tab="file">文件导入</button>
+                <button class="tab-btn" data-tab="url">URL导入</button>
+            </div>
+
+            <!-- JSON文本导入内容 -->
+            <div id="jsonTab" class="tab-content active">
+                <textarea id="jsonInput" rows="10" placeholder="请粘贴JSON格式的数据..."></textarea>
+                <button id="importJsonBtn" class="btn btn-primary">导入JSON</button>
+            </div>
+
+            <!-- 文件导入内容 -->
+            <div id="fileTab" class="tab-content">
+                <div class="file-upload-area">
+                    <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
+                    <button id="selectFileBtn" class="btn btn-secondary">选择JSON文件</button>
+                    <span id="selectedFileName" style="margin-left: 10px;"></span>
+                </div>
+                <button id="importFileBtn" class="btn btn-primary" style="margin-top: 15px;">导入文件</button>
+            </div>
+
+            <!-- URL导入内容 -->
+            <div id="urlTab" class="tab-content">
+                <div class="url-import-section">
+                    <h3>📥 从JSON文件导入图片组（支持URL）</h3>
+                    <p class="hint">自动下载图片URL并创建图片组，支持完整的标签和属性信息</p>
+                    
+                    <input type="file" id="urlJsonFileInput" accept=".json" style="display: none;">
+                    <button id="selectUrlFileBtn" class="btn btn-secondary">选择JSON文件</button>
+                    <span id="urlFileName" style="margin-left: 10px; color: #666;"></span>
+                    
+                    <div id="urlPreview" class="url-preview" style="display: none; margin-top: 15px;">
+                        <h4>📊 预览信息</h4>
+                        <div id="urlPreviewContent"></div>
+                    </div>
+                    
+                    <button id="importUrlBtn" class="btn btn-primary" style="margin-top: 15px;" disabled>
+                        🚀 开始导入
+                    </button>
+                    
+                    <div id="importProgress" class="import-progress" style="display: none; margin-top: 15px;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <p id="progressText">准备中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="toast" class="toast"></div>

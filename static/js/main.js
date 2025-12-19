@@ -7,6 +7,7 @@ class ImageTagSystem {
     constructor() {
         this.groups = [];
         this.currentFilter = 'all';
+        this.pendingImportData = null;
         this.init();
     }
 
@@ -14,6 +15,8 @@ class ImageTagSystem {
     async init() {
         await this.loadGroups();
         this.bindEvents();
+        this.bindButtonEvents();
+        this.bindUrlImportEvents();
         this.updateStatistics();
     }
 
@@ -54,7 +57,7 @@ class ImageTagSystem {
         container.innerHTML = '';
         filteredGroups.forEach(group => {
             const groupSection = document.createElement('div');
-            groupSection.className = `group-section ${group.modified ? 'modified' : ''}`;
+            groupSection.className = `group-section ${group.modified ? 'modified' : ''} ${group.id === 1 ? 'group-template' : ''}`;
             groupSection.dataset.groupId = group.id;
 
             let badges = '';
@@ -78,31 +81,105 @@ class ImageTagSystem {
                 `;
             });
 
-            // 构建标签HTML
-            let tagsHtml = '';
-            if (group.tags.length > 0) {
-                group.tags.forEach(tag => {
-                    tagsHtml += `
-                        <div class="tag" data-group-id="${group.id}" data-tag="${tag}">
-                            <span class="tag-text">${tag}</span>
-                            <div class="tag-actions">
-                                <button class="tag-btn edit-btn" data-tag="${tag}" title="编辑标签">✏️</button>
-                                <button class="tag-btn delete-btn" data-tag="${tag}" title="删除标签">×</button>
+            // 构建头部信息HTML（主要类别和置信度）
+            let headerInfoHtml = '';
+            if (group.primary_category) {
+                headerInfoHtml += `<span class="category-badge">${group.primary_category}</span>`;
+            }
+            if (group.confidence && group.confidence.length > 0) {
+                headerInfoHtml += group.confidence.map(conf => `<span class="confidence-item">${conf}</span>`).join('');
+            }
+
+            // 构建结构化信息HTML（属性和标签）
+            let structuredInfoHtml = '';
+
+            // 属性和标签合并在一个大白框里
+            structuredInfoHtml += `
+                <div class="combined-section">
+                    <div class="attributes-header">
+                        <h4 class="info-title">通用特征</h4>
+                        <h4 class="info-title">专属特征</h4>
+                        <h4 class="info-title">标签</h4>
+                    </div>
+                    <div class="attributes-content">
+                        <div class="attributes-column">
+                            ${group.attributes ? Object.entries(group.attributes['通用特征'] || {}).map(([key, values]) =>
+                                values.map(value =>
+                                    `<div class="attribute-tag" data-group-id="${group.id}" data-category="通用特征" data-key="${key}" data-value="${value}">
+                                        <span class="attribute-tag-text">${key}: ${value}</span>
+                                        <button class="attribute-delete-btn" title="删除">×</button>
+                                    </div>`
+                                ).join('')
+                            ).join('') : ''}
+                        </div>
+                        <div class="attributes-column">
+                            ${group.attributes ? Object.entries(group.attributes['专属特征'] || {}).map(([key, values]) =>
+                                values.map(value =>
+                                    `<div class="attribute-tag" data-group-id="${group.id}" data-category="专属特征" data-key="${key}" data-value="${value}">
+                                        <span class="attribute-tag-text">${key}: ${value}</span>
+                                        <button class="attribute-delete-btn" title="删除">×</button>
+                                    </div>`
+                                ).join('')
+                            ).join('') : ''}
+                        </div>
+                        <div class="attributes-column">
+                            ${group.tags && group.tags.length > 0 ? group.tags.map(tag =>
+                                `<div class="attribute-tag" data-group-id="${group.id}" data-tag="${tag}">
+                                    <span class="attribute-tag-text">${tag}</span>
+                                    <button class="attribute-delete-btn" title="删除">×</button>
+                                </div>`
+                            ).join('') : '<div class="empty-state"><p>暂无标签</p></div>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 视频描述
+            if (group.video_description) {
+                structuredInfoHtml += `
+                    <div class="info-section">
+                        <h4 class="info-title">
+                            <span class="title-icon">📹</span>
+                            视频描述
+                        </h4>
+                        <div class="info-content">
+                            <div class="description-text">
+                                ${group.video_description}
                             </div>
                         </div>
-                    `;
-                });
-            } else {
-                tagsHtml = '<div class="empty-state"><p>暂无标签</p></div>';
+                    </div>
+                `;
+            }
+
+            // 推理过程
+            if (group.reasoning) {
+                structuredInfoHtml += `
+                    <div class="info-section">
+                        <h4 class="info-title reasoning-title">
+                            <span class="title-icon">🧠</span>
+                            推理过程
+                        </h4>
+                        <div class="info-content">
+                            <div class="description-text reasoning-text">
+                                ${group.reasoning}
+                            </div>
+                        </div>
+                    </div>
+                `;
             }
 
             groupSection.innerHTML = `
                 <div class="group-header">
-                    <h2 class="group-title">图片组 ${group.id}</h2>
-                    <div class="group-stats">
-                        <span>${group.images.length} 张图片</span>
-                        <span>${group.tags.length} 个标签</span>
-                        ${badges}
+                    <div class="header-left">
+                        <h2 class="group-title">图片组 ${group.id}</h2>
+                        <div class="group-stats">
+                            <span>${group.images.length} 张图片</span>
+                            <span>${group.tags ? group.tags.length : 0} 个标签</span>
+                            ${badges}
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        ${headerInfoHtml}
                     </div>
                 </div>
                 <div class="group-content">
@@ -110,18 +187,7 @@ class ImageTagSystem {
                         ${imagesHtml}
                     </div>
                     <div class="group-tags-section">
-                        <div class="group-tags-header">
-                            <h3 class="group-tags-title">标签管理</h3>
-                            <div class="tag-actions">
-                                <div class="add-tag-form">
-                                    <input type="text" class="new-tag-input" data-group-id="${group.id}" placeholder="添加新标签..." />
-                                    <button class="add-tag-btn btn btn-primary" data-group-id="${group.id}">添加</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="tag-container" data-group-id="${group.id}">
-                            ${tagsHtml}
-                        </div>
+                        ${structuredInfoHtml}
                     </div>
                 </div>
             `;
@@ -130,75 +196,34 @@ class ImageTagSystem {
         });
     }
 
-
-
-
-
     // ========== 事件绑定 ==========
     bindEvents() {
         // 标签容器事件委托 - 处理所有组的标签操作
         document.addEventListener('click', (e) => {
             const deleteBtn = e.target.closest('.delete-btn');
             const editBtn = e.target.closest('.edit-btn');
-            const addBtn = e.target.closest('.add-tag-btn');
+            const attributeDeleteBtn = e.target.closest('.attribute-delete-btn');
 
             if (deleteBtn) {
                 const tag = deleteBtn.dataset.tag;
                 const groupId = parseInt(deleteBtn.closest('.group-section').dataset.groupId);
                 this.deleteTag(groupId, tag);
-            } else if (editBtn) {
-                const tag = editBtn.dataset.tag;
-                const groupId = parseInt(editBtn.closest('.group-section').dataset.groupId);
-                this.showEditModal(groupId, tag);
-            } else if (addBtn) {
-                const groupId = parseInt(addBtn.dataset.groupId);
-                this.addTag(groupId);
+            } else if (attributeDeleteBtn) {
+                const groupId = parseInt(attributeDeleteBtn.closest('.group-section').dataset.groupId);
+                const attributeTag = attributeDeleteBtn.closest('.attribute-tag');
+                const category = attributeTag.dataset.category;
+
+                if (category) {
+                    // 属性删除
+                    const key = attributeTag.dataset.key;
+                    const value = attributeTag.dataset.value;
+                    this.deleteAttribute(groupId, category, key, value);
+                } else {
+                    // 标签删除
+                    const tag = attributeTag.dataset.tag;
+                    this.deleteTag(groupId, tag);
+                }
             }
-        });
-
-        // 输入框回车事件委托
-        document.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && e.target.classList.contains('new-tag-input')) {
-                const groupId = parseInt(e.target.dataset.groupId);
-                this.addTag(groupId);
-            }
-        });
-
-        // 下一张按钮
-        document.getElementById('nextBtn').addEventListener('click', () => {
-            this.loadNextImage();
-        });
-
-        // 导入/导出按钮
-        document.getElementById('importBtn').addEventListener('click', () => {
-            this.showImportModal();
-        });
-
-        document.getElementById('exportBtn').addEventListener('click', () => {
-            this.exportData();
-        });
-
-        // 批量操作按钮
-        document.getElementById('batchDeleteBtn').addEventListener('click', () => {
-            this.showBatchDeleteModal();
-        });
-
-        document.getElementById('batchReplaceBtn').addEventListener('click', () => {
-            this.showBatchReplaceModal();
-        });
-
-        document.getElementById('statsBtn').addEventListener('click', () => {
-            this.showStatsModal();
-        });
-
-        // 筛选按钮
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentFilter = e.target.dataset.filter;
-                this.renderImageList();
-            });
         });
 
         // 弹窗关闭
@@ -219,6 +244,25 @@ class ImageTagSystem {
                 }
             });
         });
+    }
+
+    // ========== 绑定按钮事件 ==========
+    bindButtonEvents() {
+        // 导出按钮
+        const exportBtn = document.getElementById('exportBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                this.exportData();
+            });
+        }
+
+        // 导入按钮
+        const importBtn = document.getElementById('importBtn');
+        if (importBtn) {
+            importBtn.addEventListener('click', () => {
+                this.showImportModal();
+            });
+        }
 
         // 导入标签页切换
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -231,60 +275,218 @@ class ImageTagSystem {
             });
         });
 
-        // 文件上传
-        this.setupFileUpload();
-
         // JSON导入
         document.getElementById('importJsonBtn').addEventListener('click', () => {
             this.importFromJson();
         });
 
-        // 编辑标签保存
-        document.getElementById('saveEditBtn').addEventListener('click', () => {
-            this.saveEditedTag();
+        // JSON文件导入
+        document.getElementById('selectFileBtn').addEventListener('click', () => {
+            document.getElementById('jsonFileInput').click();
         });
 
-        // 批量删除确认
-        document.getElementById('confirmBatchDeleteBtn').addEventListener('click', () => {
-            this.confirmBatchDelete();
+        document.getElementById('jsonFileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('selectedFileName').textContent = file.name;
+            }
         });
 
-        // 批量替换确认
-        document.getElementById('confirmBatchReplaceBtn').addEventListener('click', () => {
-            this.confirmBatchReplace();
+        document.getElementById('importFileBtn').addEventListener('click', () => {
+            this.importFromFile();
         });
     }
 
-    // ========== 添加标签 ==========
-    async addTag(groupId) {
-        const input = document.querySelector(`.new-tag-input[data-group-id="${groupId}"]`);
-        const tag = input.value.trim();
+    // ========== 绑定URL导入事件 ==========
+    bindUrlImportEvents() {
+        // 选择文件按钮
+        document.getElementById('selectUrlFileBtn').addEventListener('click', () => {
+            document.getElementById('urlJsonFileInput').click();
+        });
 
-        if (!tag) {
-            this.showToast('请输入标签名称', 'warning');
+        // 文件选择变化
+        document.getElementById('urlJsonFileInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('urlFileName').textContent = file.name;
+                await this.previewUrlJson(file);
+            }
+        });
+
+        // 导入按钮
+        document.getElementById('importUrlBtn').addEventListener('click', () => {
+            this.importFromUrlJson();
+        });
+    }
+
+    // ========== 预览JSON文件内容 ==========
+    async previewUrlJson(file) {
+        try {
+            const text = await file.text();
+            const jsonData = JSON.parse(text);
+
+            // 验证JSON格式
+            if (!jsonData.groups || !Array.isArray(jsonData.groups)) {
+                this.showToast('JSON格式错误：缺少groups数组', 'error');
+                document.getElementById('urlPreview').style.display = 'none';
+                document.getElementById('importUrlBtn').disabled = true;
+                return;
+            }
+
+            // 统计信息
+            let totalGroups = jsonData.groups.length;
+            let totalImages = 0;
+            let totalTags = 0;
+            let totalAttributes = 0;
+
+            jsonData.groups.forEach(group => {
+                totalImages += group.images ? group.images.length : 0;
+                totalTags += group.tags ? group.tags.length : 0;
+                
+                if (group.attributes) {
+                    Object.values(group.attributes).forEach(category => {
+                        Object.values(category).forEach(values => {
+                            totalAttributes += values.length;
+                        });
+                    });
+                }
+            });
+
+            // 显示预览
+            document.getElementById('urlPreviewContent').innerHTML = `
+                <div class="url-preview-item">
+                    <span>📦 图片组数量：</span>
+                    <strong>${totalGroups} 组</strong>
+                </div>
+                <div class="url-preview-item">
+                    <span>🖼️ 图片总数：</span>
+                    <strong>${totalImages} 张</strong>
+                </div>
+                <div class="url-preview-item">
+                    <span>🏷️ 标签总数：</span>
+                    <strong>${totalTags} 个</strong>
+                </div>
+                <div class="url-preview-item">
+                    <span>⚙️ 属性总数：</span>
+                    <strong>${totalAttributes} 个</strong>
+                </div>
+            `;
+
+            document.getElementById('urlPreview').style.display = 'block';
+            document.getElementById('importUrlBtn').disabled = false;
+
+            // 保存JSON数据供导入使用
+            this.pendingImportData = jsonData;
+
+        } catch (error) {
+            this.showToast('JSON解析失败: ' + error.message, 'error');
+            document.getElementById('urlPreview').style.display = 'none';
+            document.getElementById('importUrlBtn').disabled = true;
+        }
+    }
+
+    // ========== 从URL JSON导入 ==========
+    async importFromUrlJson() {
+        if (!this.pendingImportData) {
+            this.showToast('请先选择JSON文件', 'warning');
             return;
         }
 
+        const progressDiv = document.getElementById('importProgress');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const importBtn = document.getElementById('importUrlBtn');
+
+        progressDiv.style.display = 'block';
+        importBtn.disabled = true;
+        progressFill.style.width = '0%';
+        progressText.textContent = '准备导入...';
+
         try {
-            const response = await fetch(`/api/groups/${groupId}/tags`, {
+            const response = await fetch('/api/import/url-json', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tag })
+                body: JSON.stringify(this.pendingImportData)
             });
 
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showToast(`✓ 已添加标签: ${tag}`, 'success');
-                this.updateGroupTags(groupId, result.tags);
-                input.value = '';
-            } else {
-                this.showToast(result.error, 'error');
+            if (!response.ok) {
+                throw new Error('服务器响应错误');
             }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            let result = null;
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (let line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            
+                            if (data.progress !== undefined) {
+                                progressFill.style.width = data.progress + '%';
+                                progressText.textContent = data.message || `进度: ${data.progress}%`;
+                            }
+                            
+                            if (data.complete) {
+                                result = data;
+                            }
+                        } catch (e) {
+                            console.error('解析进度数据失败:', e);
+                        }
+                    }
+                }
+            }
+
+            if (result && result.success) {
+                this.showToast(
+                    `✓ 成功导入 ${result.groups_created} 个组，${result.images_downloaded} 张图片`, 
+                    'success'
+                );
+                
+                if (result.errors && result.errors.length > 0) {
+                    console.warn('导入过程中的错误:', result.errors);
+                    this.showToast(
+                        `注意：${result.errors.length} 张图片下载失败，详见控制台`, 
+                        'warning'
+                    );
+                }
+
+                await this.loadGroups();
+                document.getElementById('importModal').classList.remove('show');
+                
+                // 重置状态
+                this.resetUrlImportForm();
+            } else {
+                throw new Error(result?.error || '导入失败');
+            }
+
         } catch (error) {
-            this.showToast('添加标签失败', 'error');
-            console.error(error);
+            this.showToast('导入失败: ' + error.message, 'error');
+            console.error('导入错误:', error);
+        } finally {
+            importBtn.disabled = false;
         }
+    }
+
+    // ========== 重置URL导入表单 ==========
+    resetUrlImportForm() {
+        document.getElementById('urlJsonFileInput').value = '';
+        document.getElementById('urlFileName').textContent = '';
+        document.getElementById('urlPreview').style.display = 'none';
+        document.getElementById('importProgress').style.display = 'none';
+        document.getElementById('progressFill').style.width = '0%';
+        document.getElementById('importUrlBtn').disabled = true;
+        this.pendingImportData = null;
     }
 
     // ========== 删除标签 ==========
@@ -314,6 +516,37 @@ class ImageTagSystem {
         }
     }
 
+    // ========== 删除属性 ==========
+    async deleteAttribute(groupId, category, key, value) {
+        if (!confirm(`确定要删除属性 "${key}: ${value}" 吗？`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/groups/${groupId}/attributes`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    category: category,
+                    key: key,
+                    value: value
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                this.showToast(`✓ 已删除属性 "${key}: ${value}"`, 'success');
+                this.updateGroupAttributes(groupId, result.attributes);
+            } else {
+                this.showToast(result.error, 'error');
+            }
+        } catch (error) {
+            this.showToast('删除属性失败', 'error');
+            console.error(error);
+        }
+    }
+
     // ========== 更新组的标签显示 ==========
     updateGroupTags(groupId, tags) {
         // 更新本地数据
@@ -323,27 +556,26 @@ class ImageTagSystem {
             group.modified = true;
         }
 
-        // 更新UI
-        const tagContainer = document.querySelector(`.tag-container[data-group-id="${groupId}"]`);
-        if (tagContainer) {
-            if (tags.length > 0) {
-                tagContainer.innerHTML = tags.map(tag => `
-                    <div class="tag" data-group-id="${groupId}" data-tag="${tag}">
-                        <span class="tag-text">${tag}</span>
-                        <div class="tag-actions">
-                            <button class="tag-btn edit-btn" data-tag="${tag}" title="编辑标签">✏️</button>
-                            <button class="tag-btn delete-btn" data-tag="${tag}" title="删除标签">×</button>
-                        </div>
-                    </div>
-                `).join('');
-            } else {
-                tagContainer.innerHTML = '<div class="empty-state"><p>暂无标签</p></div>';
-            }
-        }
-
-        // 更新组头部统计信息
+        // 更新UI - 标签在combined-section的第三列
         const groupSection = document.querySelector(`.group-section[data-group-id="${groupId}"]`);
         if (groupSection) {
+            const attributesColumns = groupSection.querySelectorAll('.attributes-column');
+            const tagsColumn = attributesColumns[2];
+            
+            if (tagsColumn) {
+                if (tags && tags.length > 0) {
+                    tagsColumn.innerHTML = tags.map(tag =>
+                        `<div class="attribute-tag" data-group-id="${groupId}" data-tag="${tag}">
+                            <span class="attribute-tag-text">${tag}</span>
+                            <button class="attribute-delete-btn" title="删除">×</button>
+                        </div>`
+                    ).join('');
+                } else {
+                    tagsColumn.innerHTML = '<div class="empty-state"><p>暂无标签</p></div>';
+                }
+            }
+
+            // 更新组头部统计信息
             const statsEl = groupSection.querySelector('.group-stats');
             const imagesCount = group ? group.images.length : 0;
             statsEl.innerHTML = `
@@ -357,153 +589,60 @@ class ImageTagSystem {
         this.updateStatistics();
     }
 
-    // ========== 显示编辑标签弹窗 ==========
-    showEditModal(groupId, tag) {
-        document.getElementById('editOldTag').value = tag;
-        document.getElementById('editNewTag').value = tag;
-        document.getElementById('editModal').dataset.groupId = groupId;
-        document.getElementById('editModal').classList.add('show');
-        document.getElementById('editNewTag').focus();
-    }
-
-    // ========== 保存编辑的标签 ==========
-    async saveEditedTag() {
-        const oldTag = document.getElementById('editOldTag').value;
-        const newTag = document.getElementById('editNewTag').value.trim();
-        const groupId = parseInt(document.getElementById('editModal').dataset.groupId);
-
-        if (!newTag) {
-            this.showToast('标签名称不能为空', 'warning');
-            return;
+    // ========== 更新组的属性显示 ==========
+    updateGroupAttributes(groupId, attributes) {
+        // 更新本地数据
+        const group = this.groups.find(g => g.id === groupId);
+        if (group) {
+            group.attributes = attributes;
+            group.modified = true;
         }
 
-        if (oldTag === newTag) {
-            document.getElementById('editModal').classList.remove('show');
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/groups/${groupId}/tags/edit`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ old_tag: oldTag, new_tag: newTag })
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showToast(`✓ 已将"${oldTag}"修改为"${newTag}"`, 'success');
-                this.updateGroupTags(groupId, result.tags);
-                document.getElementById('editModal').classList.remove('show');
-            } else {
-                this.showToast(result.error, 'error');
+        // 更新UI
+        const groupSection = document.querySelector(`.group-section[data-group-id="${groupId}"]`);
+        if (groupSection) {
+            const attributesContent = groupSection.querySelector('.attributes-content');
+            if (attributesContent) {
+                attributesContent.innerHTML = `
+                    <div class="attributes-column">
+                        ${attributes && Object.entries(attributes['通用特征'] || {}).map(([key, values]) =>
+                            values.map(value =>
+                                `<div class="attribute-tag" data-group-id="${groupId}" data-category="通用特征" data-key="${key}" data-value="${value}">
+                                    <span class="attribute-tag-text">${key}: ${value}</span>
+                                    <button class="attribute-delete-btn" title="删除">×</button>
+                                </div>`
+                            ).join('')
+                        ).join('')}
+                    </div>
+                    <div class="attributes-column">
+                        ${attributes && Object.entries(attributes['专属特征'] || {}).map(([key, values]) =>
+                            values.map(value =>
+                                `<div class="attribute-tag" data-group-id="${groupId}" data-category="专属特征" data-key="${key}" data-value="${value}">
+                                    <span class="attribute-tag-text">${key}: ${value}</span>
+                                    <button class="attribute-delete-btn" title="删除">×</button>
+                                </div>`
+                            ).join('')
+                        ).join('')}
+                    </div>
+                    <div class="attributes-column">
+                        ${group.tags && group.tags.length > 0 ? group.tags.map(tag =>
+                            `<div class="attribute-tag" data-group-id="${groupId}" data-tag="${tag}">
+                                <span class="attribute-tag-text">${tag}</span>
+                                <button class="attribute-delete-btn" title="删除">×</button>
+                            </div>`
+                        ).join('') : '<div class="empty-state"><p>暂无标签</p></div>'}
+                    </div>
+                `;
             }
-        } catch (error) {
-            this.showToast('修改标签失败', 'error');
-            console.error(error);
         }
+
+        this.updateStatistics();
     }
-
-
-    // ========== 加载下一张图片 ==========
-    loadNextImage() {
-        const currentIndex = this.images.findIndex(img => img.id === this.currentImageId);
-
-        let nextIndex = currentIndex + 1;
-        if (nextIndex >= this.images.length) {
-            nextIndex = 0; // 循环到第一张
-        }
-
-        const nextImage = this.images[nextIndex];
-        if (nextImage) {
-            this.loadImage(nextImage.id);
-        }
-    }
-
 
     // ========== 更新统计信息 ==========
     updateStatistics() {
         const total = this.groups.length;
         document.getElementById('totalCount').textContent = total;
-    }
-
-    // ========== 文件上传设置 ==========
-    setupFileUpload() {
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            this.handleFileUpload(e.target.files);
-        });
-
-        // 拖拽上传
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            this.handleFileUpload(e.dataTransfer.files);
-        });
-    }
-
-    // ========== 处理文件上传 ==========
-    async handleFileUpload(files) {
-        const formData = new FormData();
-        let validFiles = 0;
-
-        for (let file of files) {
-            if (file.type.startsWith('image/')) {
-                formData.append('files', file);
-                validFiles++;
-            }
-        }
-
-        if (validFiles === 0) {
-            this.showToast('请选择图片文件', 'warning');
-            return;
-        }
-
-        const progressDiv = document.getElementById('uploadProgress');
-        progressDiv.style.display = 'block';
-        progressDiv.innerHTML = '<p>上传中...</p>';
-
-        try {
-            const response = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showToast(`✓ 成功上传 ${result.uploaded} 个文件`, 'success');
-                progressDiv.innerHTML = `
-                    <div class="progress-item success">
-                        <span>✓ 上传完成: ${result.uploaded} 个文件</span>
-                    </div>
-                    ${result.errors.length > 0 ? `<p style="color: var(--danger-color); margin-top: 10px;">失败: ${result.errors.length} 个文件</p>` : ''}
-                `;
-
-                // 清空文件输入
-                document.getElementById('fileInput').value = '';
-            } else {
-                this.showToast('上传失败', 'error');
-            }
-        } catch (error) {
-            this.showToast('上传失败: ' + error.message, 'error');
-            console.error(error);
-        }
     }
 
     // ========== 从JSON导入 ==========
@@ -539,37 +678,62 @@ class ImageTagSystem {
         }
     }
 
+    // ========== 从文件导入JSON ==========
+    async importFromFile() {
+        const fileInput = document.getElementById('jsonFileInput');
+        const file = fileInput.files[0];
+
+        if (!file) {
+            this.showToast('请先选择JSON文件', 'warning');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/api/import/file', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                this.showToast(`✓ 成功导入 ${result.imported} 张图片，创建 ${result.groups_created} 个组`, 'success');
+                await this.loadGroups();
+                document.getElementById('importModal').classList.remove('show');
+                fileInput.value = '';
+                document.getElementById('selectedFileName').textContent = '';
+            } else {
+                this.showToast('导入失败: ' + result.error, 'error');
+            }
+        } catch (error) {
+            this.showToast('导入失败: ' + error.message, 'error');
+        }
+    }
+
     // ========== 导出数据 ==========
     async exportData() {
-        console.log('开始导出数据...');
         try {
-            console.log('发送请求到 /api/export');
             const response = await fetch('/api/export');
-            console.log('收到响应:', response.status);
-
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
-            console.log('数据获取成功:', data);
-
-            const blob = new Blob([JSON.stringify(data, null, 2)],
-                { type: 'application/json' });
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
-            console.log('Blob创建成功');
 
             const a = document.createElement('a');
             a.href = url;
             a.download = `annotations_${new Date().toISOString().slice(0,10)}.json`;
-            console.log('准备下载文件...');
             a.click();
 
             URL.revokeObjectURL(url);
-            console.log('显示成功提示');
-            this.showToast('✓ 数据导出成功！文件已下载到默认下载文件夹', 'success');
+            this.showToast('✓ 数据导出成功！', 'success');
         } catch (error) {
-            console.error('导出过程中出错:', error);
+            console.error('导出错误:', error);
             this.showToast('导出失败: ' + error.message, 'error');
         }
     }
@@ -577,139 +741,6 @@ class ImageTagSystem {
     // ========== 显示导入弹窗 ==========
     showImportModal() {
         document.getElementById('importModal').classList.add('show');
-    }
-
-    // ========== 显示批量删除弹窗 ==========
-    showBatchDeleteModal() {
-        document.getElementById('batchDeleteModal').classList.add('show');
-        document.getElementById('batchDeleteTag').value = '';
-        document.getElementById('batchDeleteTag').focus();
-    }
-
-    // ========== 确认批量删除 ==========
-    async confirmBatchDelete() {
-        const tag = document.getElementById('batchDeleteTag').value.trim();
-
-        if (!tag) {
-            this.showToast('请输入要删除的标签名称', 'warning');
-            return;
-        }
-
-        if (!confirm(`确定要从所有图片中删除标签 "${tag}" 吗？\n此操作不可撤销！`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/batch/delete-tag', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tag })
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showToast(`✓ ${result.message}`, 'success');
-                await this.loadGroups();
-                document.getElementById('batchDeleteModal').classList.remove('show');
-            } else {
-                this.showToast(result.error, 'error');
-            }
-        } catch (error) {
-            this.showToast('批量删除失败', 'error');
-            console.error(error);
-        }
-    }
-
-    // ========== 显示批量替换弹窗 ==========
-    showBatchReplaceModal() {
-        document.getElementById('batchReplaceModal').classList.add('show');
-        document.getElementById('batchReplaceOldTag').value = '';
-        document.getElementById('batchReplaceNewTag').value = '';
-        document.getElementById('batchReplaceOldTag').focus();
-    }
-
-    // ========== 确认批量替换 ==========
-    async confirmBatchReplace() {
-        const oldTag = document.getElementById('batchReplaceOldTag').value.trim();
-        const newTag = document.getElementById('batchReplaceNewTag').value.trim();
-
-        if (!oldTag || !newTag) {
-            this.showToast('请输入标签名称', 'warning');
-            return;
-        }
-
-        if (!confirm(`确定要将所有图片中的 "${oldTag}" 替换为 "${newTag}" 吗？`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/batch/replace-tag', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ old_tag: oldTag, new_tag: newTag })
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showToast(`✓ ${result.message}`, 'success');
-                await this.loadGroups();
-                document.getElementById('batchReplaceModal').classList.remove('show');
-            } else {
-                this.showToast(result.error, 'error');
-            }
-        } catch (error) {
-            this.showToast('批量替换失败', 'error');
-            console.error(error);
-        }
-    }
-
-    // ========== 显示统计信息弹窗 ==========
-    async showStatsModal() {
-        document.getElementById('statsModal').classList.add('show');
-        document.getElementById('statsContent').innerHTML = '<p>加载中...</p>';
-
-        try {
-            const response = await fetch('/api/statistics');
-            const stats = await response.json();
-
-            let tagDistHtml = '';
-            for (let [tag, count] of Object.entries(stats.tag_distribution)) {
-                tagDistHtml += `
-                    <div class="tag-dist-item">
-                        <span class="tag-dist-name">${tag}</span>
-                        <span class="tag-dist-count">${count}</span>
-                    </div>
-                `;
-            }
-
-            document.getElementById('statsContent').innerHTML = `
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <h4>总图片数</h4>
-                        <div class="value">${stats.total_images}</div>
-                    </div>
-                    <div class="stat-box">
-                        <h4>已修改</h4>
-                        <div class="value">${stats.modified_images}</div>
-                    </div>
-                    <div class="stat-box">
-                        <h4>标签总数</h4>
-                        <div class="value">${stats.total_tags}</div>
-                    </div>
-                </div>
-
-                <div class="tag-distribution">
-                    <h3>标签分布 (前20)</h3>
-                    ${tagDistHtml}
-                </div>
-            `;
-        } catch (error) {
-            document.getElementById('statsContent').innerHTML =
-                '<p style="color: var(--danger-color);">加载统计信息失败</p>';
-            console.error(error);
-        }
     }
 
     // ========== Toast 提示 ==========
@@ -727,10 +758,5 @@ class ImageTagSystem {
 // ========== 启动应用 ==========
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new ImageTagSystem();
-
-    // 测试toast功能
-    setTimeout(() => {
-        console.log('测试toast功能');
-        window.app.showToast('系统已就绪', 'success');
-    }, 1000);
+    console.log('✓ 图片标签筛选系统已启动');
 });
