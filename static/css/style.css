@@ -747,3 +747,169 @@ textarea:focus {
     align-items: center;
     gap: 10px;
 }
+
+/* ========== 任务信息样式 ========== */
+.task-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.task-info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #667eea;
+}
+
+.task-info-label {
+    font-weight: 600;
+    color: #495057;
+    min-width: 70px;
+}
+
+.task-info-value {
+    color: #6c757d;
+    flex: 1;
+    word-break: break-all;
+}
+
+.url-link a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.url-link a:hover {
+    text-decoration: underline;
+}
+
+/* ========== 模型信息样式 ========== */
+.model-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.model-info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: #e9ecef;
+    border-radius: 4px;
+}
+
+.model-info-label {
+    font-weight: 600;
+    color: #495057;
+    font-size: 14px;
+}
+
+.model-info-value {
+    color: #6c757d;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+}
+
+/* ========== 推送标题样式 ========== */
+.push-title-text {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 16px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    margin-top: 8px;
+}
+
+/* ========== 文字内容样式 ========== */
+.text-content-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.text-content-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #fff3cd;
+    border-radius: 6px;
+    border-left: 3px solid #ffc107;
+}
+
+.text-content-label {
+    font-weight: 600;
+    color: #856404;
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.text-content-value {
+    color: #856404;
+    font-style: italic;
+    flex: 1;
+}
+
+/* ========== 使用统计样式 ========== */
+.usage-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.usage-stat-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #d1ecf1;
+    border-radius: 4px;
+    border-left: 3px solid #17a2b8;
+}
+
+.usage-stat-label {
+    font-weight: 600;
+    color: #0c5460;
+    font-size: 13px;
+}
+
+.usage-stat-value {
+    color: #0c5460;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.7);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+/* ========== 远程图片样式优化 ========== */
+.group-image-item img[loading="lazy"] {
+    transition: opacity 0.3s ease;
+}
+
+.group-image-item img[loading="lazy"]:not([src]) {
+    opacity: 0.5;
+}
+
+.group-image-item img[loading="lazy"][src] {
+    opacity: 1;
+}
+
+/* 远程图片标识 */
+.group-image-item:has(img[src^="http"]) .image-filename::before {
+    content: "🌐 ";
+    color: #667eea;
+    font-weight: bold;
+}

@@ -71,12 +71,18 @@ class ImageTagSystem {
             // 构建图片HTML
             let imagesHtml = '';
             group.images.forEach(img => {
+                // 检查是否有URL字段（远程图片）或filename字段（本地图片）
+                const imageSrc = img.url ? img.url : `/static/images/${img.filename}`;
+                const imageAlt = img.url ? `远程图片 ${img.type || 'unknown'}` : img.filename;
+                const imageLabel = img.url ? `${img.type || '远程图片'}` : img.filename;
+
                 imagesHtml += `
                     <div class="group-image-item">
-                        <img src="/static/images/${img.filename}"
-                             alt="${img.filename}"
-                             onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2220%22%3E图片未找到%3C/text%3E%3C/svg%3E'">
-                        <div class="image-filename">${img.filename}</div>
+                        <img src="${imageSrc}"
+                             alt="${imageAlt}"
+                             onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2220%22%3E图片加载失败%3C/text%3E%3C/svg%3E'"
+                             loading="lazy">
+                        <div class="image-filename">${imageLabel}</div>
                     </div>
                 `;
             });
@@ -162,6 +168,113 @@ class ImageTagSystem {
                         <div class="info-content">
                             <div class="description-text reasoning-text">
                                 ${group.reasoning}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 任务信息（仅图片组2有）
+            if (group.task) {
+                structuredInfoHtml += `
+                    <div class="info-section">
+                        <h4 class="info-title">
+                            <span class="title-icon">📋</span>
+                            任务信息
+                        </h4>
+                        <div class="info-content">
+                            <div class="task-info-grid">
+                                <div class="task-info-item">
+                                    <span class="task-info-label">UID:</span>
+                                    <span class="task-info-value">${group.task.uid}</span>
+                                </div>
+                                <div class="task-info-item">
+                                    <span class="task-info-label">人类标注:</span>
+                                    <span class="task-info-value">${group.task.human_label}</span>
+                                </div>
+                                <div class="task-info-item">
+                                    <span class="task-info-label">封面URL:</span>
+                                    <span class="task-info-value url-link"><a href="${group.task.cover_url}" target="_blank">查看封面</a></span>
+                                </div>
+                                <div class="task-info-item">
+                                    <span class="task-info-label">直播URL:</span>
+                                    <span class="task-info-value url-link"><a href="${group.task.live_url}" target="_blank">查看直播</a></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 模型信息（仅图片组2有）
+            if (group.provider || group.model || group.timestamp) {
+                structuredInfoHtml += `
+                    <div class="info-section">
+                        <h4 class="info-title">
+                            <span class="title-icon">🤖</span>
+                            模型信息
+                        </h4>
+                        <div class="info-content">
+                            <div class="model-info-grid">
+                                ${group.provider ? `<div class="model-info-item"><span class="model-info-label">提供商:</span><span class="model-info-value">${group.provider}</span></div>` : ''}
+                                ${group.model ? `<div class="model-info-item"><span class="model-info-label">模型:</span><span class="model-info-value">${group.model}</span></div>` : ''}
+                                ${group.timestamp ? `<div class="model-info-item"><span class="model-info-label">时间戳:</span><span class="model-info-value">${group.timestamp}</span></div>` : ''}
+                                ${group.elapsed_seconds ? `<div class="model-info-item"><span class="model-info-label">处理耗时:</span><span class="model-info-value">${group.elapsed_seconds.toFixed(2)}秒</span></div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 推送标题（仅图片组2有）
+            if (group.push_title) {
+                structuredInfoHtml += `
+                    <div class="info-section">
+                        <h4 class="info-title">
+                            <span class="title-icon">📢</span>
+                            推送标题
+                        </h4>
+                        <div class="info-content">
+                            <div class="push-title-text">
+                                ${group.push_title}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 文字内容信息（仅图片组2有）
+            if (group.封面图包含文字 !== undefined || group.直播图包含文字 !== undefined) {
+                structuredInfoHtml += `
+                    <div class="info-section">
+                        <h4 class="info-title">
+                            <span class="title-icon">📝</span>
+                            图片文字内容
+                        </h4>
+                        <div class="info-content">
+                            <div class="text-content-grid">
+                                ${group.封面图包含文字 !== undefined ? `<div class="text-content-item"><span class="text-content-label">封面图文字:</span><span class="text-content-value">"${group.封面图包含文字}"</span></div>` : ''}
+                                ${group.直播图包含文字 !== undefined ? `<div class="text-content-item"><span class="text-content-label">直播图文字:</span><span class="text-content-value">"${group.直播图包含文字}"</span></div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 使用统计（仅图片组2有）
+            if (group.usage) {
+                structuredInfoHtml += `
+                    <div class="info-section">
+                        <h4 class="info-title">
+                            <span class="title-icon">📊</span>
+                            使用统计
+                        </h4>
+                        <div class="info-content">
+                            <div class="usage-stats-grid">
+                                ${group.usage.input_tokens !== undefined ? `<div class="usage-stat-item"><span class="usage-stat-label">输入Token:</span><span class="usage-stat-value">${group.usage.input_tokens}</span></div>` : ''}
+                                ${group.usage.output_tokens !== undefined ? `<div class="usage-stat-item"><span class="usage-stat-label">输出Token:</span><span class="usage-stat-value">${group.usage.output_tokens}</span></div>` : ''}
+                                ${group.usage.total_tokens !== undefined ? `<div class="usage-stat-item"><span class="usage-stat-label">总Token:</span><span class="usage-stat-value">${group.usage.total_tokens}</span></div>` : ''}
+                                ${group.usage.image_tokens !== undefined ? `<div class="usage-stat-item"><span class="usage-stat-label">图片Token:</span><span class="usage-stat-value">${group.usage.image_tokens}</span></div>` : ''}
                             </div>
                         </div>
                     </div>
