@@ -15,6 +15,14 @@ import time
 
 app = Flask(__name__)
 
+# 添加CORS支持（如果需要）
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 # ========== 配置 ==========
 IMAGE_FOLDER = 'static/images'
 DATA_FILE = 'data/annotations.json'
@@ -150,6 +158,69 @@ def get_group(group_id):
     return jsonify({'error': 'Group not found'}), 404
 
 
+@app.route('/api/groups/<int:group_id>/delete', methods=['POST', 'OPTIONS'])
+def delete_group(group_id):
+    """删除整个图片组"""
+    try:
+        # 处理CORS预检请求
+        if request.method == 'OPTIONS':
+            return jsonify({'status': 'ok'}), 200
+
+        print(f"收到删除请求: group_id={group_id}, method={request.method}")
+
+        # 验证group_id是否有效
+        if not isinstance(group_id, int) or group_id <= 0:
+            return jsonify({'error': 'Invalid group ID'}), 400
+
+        data = load_data()
+        print(f"当前组数量: {len(data.get('groups', []))}")
+
+        for i, group in enumerate(data.get('groups', [])):
+            print(f"检查组 {group['id']}")
+            if group['id'] == group_id:
+                # 获取要删除的图片信息（可能是本地文件名或远程URL）
+                images_info = []
+                for img in group.get('images', []):
+                    if 'filename' in img:
+                        # 本地图片
+                        images_info.append({'type': 'local', 'filename': img['filename']})
+                    elif 'url' in img:
+                        # 远程图片
+                        images_info.append({'type': 'remote', 'url': img['url']})
+                    else:
+                        # 其他格式
+                        images_info.append({'type': 'unknown', 'data': img})
+
+                # 从数据中删除组
+                deleted_group = data['groups'].pop(i)
+
+                # 保存数据
+                save_data(data)
+
+                print(f"成功删除图片组 {group_id}")
+
+                # 注意：这里不删除物理文件，因为：
+                # 1. 远程图片无法删除
+                # 2. 本地图片可能被其他地方引用
+                # 用户可以手动清理不需要的文件
+
+                return jsonify({
+                    'success': True,
+                    'message': f'图片组 {group_id} 已删除',
+                    'deleted_images': len(images_info),
+                    'images_info': images_info  # 返回图片信息，让用户了解删除了什么
+                })
+
+        print(f"未找到图片组 {group_id}")
+        return jsonify({'error': 'Group not found'}), 404
+
+    except Exception as e:
+        print(f"删除图片组时发生错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'服务器内部错误: {str(e)}'}), 500
+
+
 # ========== 路由：标签操作 ==========
 @app.route('/api/groups/<int:group_id>/tags', methods=['DELETE'])
 def delete_tag(group_id):
@@ -277,80 +348,238 @@ def import_data():
     """导入JSON数据并自动分组"""
     try:
         import_data = request.get_json()
-        if not import_data or 'images' not in import_data:
-            return jsonify({'error': 'Invalid data format'}), 400
+        if not import_data:
+            return jsonify({'error': 'No data provided'}), 400
 
         # 合并导入的数据
         data = load_data()
 
-        # 收集现有图片ID
-        existing_image_ids = set()
-        for group in data.get('groups', []):
-            for img in group.get('images', []):
-                existing_image_ids.add(img['id'])
-
         # 获取当前最大ID
-        max_id = 0
+        max_group_id = max([g['id'] for g in data.get('groups', [])], default=0)
+        max_image_id = 0
         for group in data.get('groups', []):
             for img in group.get('images', []):
-                max_id = max(max_id, img.get('id', 0))
+                max_image_id = max(max_image_id, img.get('id', 0))
 
-        # 收集需要导入的图片
-        new_images = []
-        for img in import_data['images']:
-            if 'filename' in img:
-                if img.get('id') and img['id'] not in existing_image_ids:
-                    # 保留原有ID
-                    new_images.append({
-                        'id': img['id'],
-                        'filename': img['filename'],
-                        'tags': img.get('tags', []),
-                        'reviewed': img.get('reviewed', False)
-                    })
-                elif not img.get('id'):
-                    # 分配新ID
-                    max_id += 1
-                    new_images.append({
-                        'id': max_id,
-                        'filename': img['filename'],
-                        'tags': img.get('tags', []),
-                        'reviewed': img.get('reviewed', False)
-                    })
-
-        # 将新图片两两分组
         imported_groups = 0
-        for i in range(0, len(new_images), 2):
-            group_images = new_images[i:i+2]
 
-            # 合并tags
-            group_tags = []
-            for img in group_images:
-                group_tags.extend(img.get('tags', []))
-            group_tags = list(set(group_tags))  # 去重
+        # 检查数据格式：如果是example.json格式的单个图片组
+        if 'output' in import_data and 'task' in import_data:
+            print("检测到example.json格式的数据")
+            # 处理单个图片组数据
+            output_data = import_data.get('output', {})
 
-            new_group = {
-                'id': len(data.get('groups', [])) + imported_groups + 1,
-                'images': [{'id': img['id'], 'filename': img['filename']} for img in group_images],
-                'primary_category': '',
-                'confidence': [],
-                'attributes': {
-                    '通用特征': {},
-                    '专属特征': {}
-                },
-                'tags': group_tags,
-                'video_description': '',
-                'reasoning': '',
-                'reviewed': any(img.get('reviewed', False) for img in group_images),
-                'modified': False
-            }
-            data['groups'].append(new_group)
-            imported_groups += 1
+            # 检查是否已存在相同UID的图片组
+            import_uid = import_data.get('task', {}).get('uid')
+            if import_uid:
+                existing_group = None
+                for group in data.get('groups', []):
+                    if group.get('task', {}).get('uid') == import_uid:
+                        existing_group = group
+                        break
 
-        save_data(data)
-        return jsonify({'imported': len(new_images), 'groups_created': imported_groups})
+                if existing_group:
+                    print(f"发现重复UID {import_uid}，跳过导入（现有组ID: {existing_group['id']}）")
+                    return jsonify({
+                        'success': False,
+                        'message': f'UID {import_uid} 已存在，跳过导入',
+                        'existing_group_id': existing_group['id']
+                    })
+
+            # 从cover_url和live_url创建图片
+            images = []
+            if import_data.get('task', {}).get('cover_url'):
+                max_image_id += 1
+                images.append({
+                    'id': max_image_id,
+                    'url': import_data['task']['cover_url'],
+                    'type': 'cover'
+                })
+
+            if import_data.get('task', {}).get('live_url'):
+                max_image_id += 1
+                images.append({
+                    'id': max_image_id,
+                    'url': import_data['task']['live_url'],
+                    'type': 'live'
+                })
+
+            if images:
+                max_group_id += 1
+                new_group = {
+                    'id': max_group_id,
+                    'task': import_data.get('task', {}),
+                    'provider': import_data.get('provider', ''),
+                    'model': import_data.get('model', ''),
+                    'timestamp': import_data.get('timestamp', ''),
+                    'elapsed_seconds': import_data.get('elapsed_seconds', 0),
+                    'usage': import_data.get('usage', {}),
+                    'images': images,
+                    'primary_category': output_data.get('primary_category', ''),
+                    'confidence': output_data.get('confidence', []),
+                    'attributes': output_data.get('attributes', {
+                        '通用特征': {},
+                        '专属特征': {}
+                    }),
+                    'tags': output_data.get('tags', []),
+                    'video_description': output_data.get('video_description', ''),
+                    'reasoning': output_data.get('reasoning', ''),
+                    'push_title': output_data.get('push_title', ''),
+                    '封面图包含文字': output_data.get('封面图包含文字', ''),
+                    '直播图包含文字': output_data.get('直播图包含文字', ''),
+                    'reviewed': False,
+                    'modified': False
+                }
+                data['groups'].append(new_group)
+                imported_groups += 1
+                print(f"成功导入单个图片组，ID: {max_group_id}")
+
+        # 检查是否是原来的images数组格式
+        elif 'images' in import_data:
+            print("检测到传统images数组格式的数据")
+            # 收集现有图片ID
+            existing_image_ids = set()
+            for group in data.get('groups', []):
+                for img in group.get('images', []):
+                    existing_image_ids.add(img['id'])
+
+            # 收集需要导入的图片
+            new_images = []
+            for img in import_data['images']:
+                if 'filename' in img:
+                    if img.get('id') and img['id'] not in existing_image_ids:
+                        # 保留原有ID
+                        new_images.append({
+                            'id': img['id'],
+                            'filename': img['filename'],
+                            'tags': img.get('tags', []),
+                            'reviewed': img.get('reviewed', False)
+                        })
+                    elif not img.get('id'):
+                        # 分配新ID
+                        max_image_id += 1
+                        new_images.append({
+                            'id': max_image_id,
+                            'filename': img['filename'],
+                            'tags': img.get('tags', []),
+                            'reviewed': img.get('reviewed', False)
+                        })
+
+            # 将新图片两两分组
+            for i in range(0, len(new_images), 2):
+                group_images = new_images[i:i+2]
+
+                # 合并tags
+                group_tags = []
+                for img in group_images:
+                    group_tags.extend(img.get('tags', []))
+                group_tags = list(set(group_tags))  # 去重
+
+                max_group_id += 1
+                new_group = {
+                    'id': max_group_id,
+                    'images': [{'id': img['id'], 'filename': img['filename']} for img in group_images],
+                    'primary_category': '',
+                    'confidence': [],
+                    'attributes': {
+                        '通用特征': {},
+                        '专属特征': {}
+                    },
+                    'tags': group_tags,
+                    'video_description': '',
+                    'reasoning': '',
+                    'reviewed': any(img.get('reviewed', False) for img in group_images),
+                    'modified': False
+                }
+                data['groups'].append(new_group)
+                imported_groups += 1
+
+        else:
+            return jsonify({'error': 'Unsupported data format. Expected either "images" array or single group with "output" field'}), 400
+
+        if imported_groups > 0:
+            save_data(data)
+            print(f"成功导入 {imported_groups} 个图片组")
+            return jsonify({
+                'success': True,
+                'message': f'成功导入 {imported_groups} 个图片组',
+                'groups_created': imported_groups
+            })
+        else:
+            return jsonify({'error': 'No valid data to import'}), 400
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"导入数据时发生错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'服务器内部错误: {str(e)}'}), 500
+
+
+def process_single_group_item(item_data, data, max_group_id_ref, max_image_id_ref):
+    """处理单个图片组对象的导入"""
+    # 检查是否已存在相同UID的图片组
+    import_uid = item_data.get('task', {}).get('uid')
+    if import_uid:
+        existing_group = None
+        for group in data.get('groups', []):
+            if group.get('task', {}).get('uid') == import_uid:
+                existing_group = group
+                break
+
+        if existing_group:
+            print(f"发现重复UID {import_uid}，跳过导入（现有组ID: {existing_group['id']}）")
+            return False  # 不算作成功导入
+
+    # 从cover_url和live_url创建图片
+    images = []
+    if item_data.get('task', {}).get('cover_url'):
+        max_image_id_ref[0] += 1
+        images.append({
+            'id': max_image_id_ref[0],
+            'url': item_data['task']['cover_url'],
+            'type': 'cover'
+        })
+
+    if item_data.get('task', {}).get('live_url'):
+        max_image_id_ref[0] += 1
+        images.append({
+            'id': max_image_id_ref[0],
+            'url': item_data['task']['live_url'],
+            'type': 'live'
+        })
+
+    if images:
+        max_group_id_ref[0] += 1
+        output_data = item_data.get('output', {})
+        new_group = {
+            'id': max_group_id_ref[0],
+            'task': item_data.get('task', {}),
+            'provider': item_data.get('provider', ''),
+            'model': item_data.get('model', ''),
+            'timestamp': item_data.get('timestamp', ''),
+            'elapsed_seconds': item_data.get('elapsed_seconds', 0),
+            'usage': item_data.get('usage', {}),
+            'images': images,
+            'primary_category': output_data.get('primary_category', ''),
+            'confidence': output_data.get('confidence', []),
+            'attributes': output_data.get('attributes', {
+                '通用特征': {},
+                '专属特征': {}
+            }),
+            'tags': output_data.get('tags', []),
+            'video_description': output_data.get('video_description', ''),
+            'reasoning': output_data.get('reasoning', ''),
+            'push_title': output_data.get('push_title', ''),
+            '封面图包含文字': output_data.get('封面图包含文字', ''),
+            '直播图包含文字': output_data.get('直播图包含文字', ''),
+            'reviewed': False,
+            'modified': False
+        }
+        data['groups'].append(new_group)
+        print(f"成功导入单个图片组，ID: {max_group_id_ref[0]}, UID: {import_uid}")
+        return True
+
+    return False
 
 
 @app.route('/api/import/file', methods=['POST'])
@@ -364,82 +593,149 @@ def import_from_file():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
 
-        if not file.filename.endswith('.json'):
-            return jsonify({'error': 'Only JSON files are allowed'}), 400
+        if not (file.filename.endswith('.json') or file.filename.endswith('.jsonl')):
+            return jsonify({'error': 'Only JSON and JSONL files are allowed'}), 400
 
         # 读取文件内容
         file_content = file.read().decode('utf-8')
-        import_data = json.loads(file_content)
 
-        if not import_data or 'images' not in import_data:
-            return jsonify({'error': 'Invalid JSON format'}), 400
+        # 检查是否是JSON Lines格式（.jsonl文件）
+        if file.filename.endswith('.jsonl'):
+            print("检测到JSON Lines格式的文件")
+            # 解析JSON Lines格式
+            json_objects = []
+            for line_num, line in enumerate(file_content.strip().split('\n'), 1):
+                line = line.strip()
+                if line:  # 跳过空行
+                    try:
+                        json_obj = json.loads(line)
+                        json_objects.append(json_obj)
+                    except json.JSONDecodeError as e:
+                        return jsonify({'error': f'JSON解析错误在第{line_num}行: {str(e)}'}), 400
 
-        # 合并导入的数据（与上面的import_data逻辑相同）
+            if not json_objects:
+                return jsonify({'error': 'JSONL文件中没有有效的JSON对象'}), 400
+
+            import_data = json_objects  # 对于JSONL，直接使用对象数组
+        else:
+            # 处理单个JSON对象
+            import_data = json.loads(file_content)
+            if not import_data:
+                return jsonify({'error': 'Empty JSON file'}), 400
+
+        # 合并导入的数据
         data = load_data()
 
-        # 收集现有图片ID
-        existing_image_ids = set()
-        for group in data.get('groups', []):
-            for img in group.get('images', []):
-                existing_image_ids.add(img['id'])
-
         # 获取当前最大ID
-        max_id = 0
+        max_group_id = max([g['id'] for g in data.get('groups', [])], default=0)
+        max_image_id = 0
         for group in data.get('groups', []):
             for img in group.get('images', []):
-                max_id = max(max_id, img.get('id', 0))
+                max_image_id = max(max_image_id, img.get('id', 0))
 
-        # 收集需要导入的图片
-        new_images = []
-        for img in import_data['images']:
-            if 'filename' in img:
-                if img.get('id') and img['id'] not in existing_image_ids:
-                    new_images.append({
-                        'id': img['id'],
-                        'filename': img['filename'],
-                        'tags': img.get('tags', []),
-                        'reviewed': img.get('reviewed', False)
-                    })
-                elif not img.get('id'):
-                    max_id += 1
-                    new_images.append({
-                        'id': max_id,
-                        'filename': img['filename'],
-                        'tags': img.get('tags', []),
-                        'reviewed': img.get('reviewed', False)
-                    })
-
-        # 将新图片两两分组
         imported_groups = 0
-        for i in range(0, len(new_images), 2):
-            group_images = new_images[i:i+2]
 
-            # 合并tags
-            group_tags = []
-            for img in group_images:
-                group_tags.extend(img.get('tags', []))
-            group_tags = list(set(group_tags))
+        # 处理数据：如果是JSON Lines数组，每个元素都是一个图片组对象
+        if isinstance(import_data, list):
+            print(f"处理JSON Lines格式，包含 {len(import_data)} 个对象")
+            max_group_id_ref = [max_group_id]
+            max_image_id_ref = [max_image_id]
+            for item_index, item_data in enumerate(import_data):
+                try:
+                    print(f"处理第 {item_index + 1} 个对象...")
+                    success = process_single_group_item(item_data, data, max_group_id_ref, max_image_id_ref)
+                    if success:
+                        imported_groups += 1
+                except Exception as e:
+                    print(f"处理第 {item_index + 1} 个对象时出错: {str(e)}")
+                    # 继续处理其他对象，不中断整个导入过程
 
-            new_group = {
-                'id': len(data.get('groups', [])) + imported_groups + 1,
-                'images': [{'id': img['id'], 'filename': img['filename']} for img in group_images],
-                'primary_category': '',
-                'confidence': [],
-                'attributes': {
-                    '通用特征': {},
-                    '专属特征': {}
-                },
-                'tags': group_tags,
-                'video_description': '',
-                'reasoning': '',
-                'reviewed': any(img.get('reviewed', False) for img in group_images),
-                'modified': False
-            }
-            data['groups'].append(new_group)
-            imported_groups += 1
+            # 更新外部变量
+            max_group_id = max_group_id_ref[0]
+            max_image_id = max_image_id_ref[0]
 
-        save_data(data)
-        return jsonify({'imported': len(new_images), 'groups_created': imported_groups})
+        # 检查数据格式：如果是example.json格式的单个图片组
+        elif 'output' in import_data and 'task' in import_data:
+            print("检测到example.json格式的文件数据")
+            max_group_id_ref = [max_group_id]
+            max_image_id_ref = [max_image_id]
+            success = process_single_group_item(import_data, data, max_group_id_ref, max_image_id_ref)
+            if success:
+                imported_groups += 1
+                max_group_id = max_group_id_ref[0]
+                max_image_id = max_image_id_ref[0]
+
+        # 检查是否是原来的images数组格式
+        elif 'images' in import_data:
+            print("检测到传统images数组格式的文件数据")
+            # 收集现有图片ID
+            existing_image_ids = set()
+            for group in data.get('groups', []):
+                for img in group.get('images', []):
+                    existing_image_ids.add(img['id'])
+
+            # 收集需要导入的图片
+            new_images = []
+            for img in import_data['images']:
+                if 'filename' in img:
+                    if img.get('id') and img['id'] not in existing_image_ids:
+                        new_images.append({
+                            'id': img['id'],
+                            'filename': img['filename'],
+                            'tags': img.get('tags', []),
+                            'reviewed': img.get('reviewed', False)
+                        })
+                    elif not img.get('id'):
+                        max_image_id += 1
+                        new_images.append({
+                            'id': max_image_id,
+                            'filename': img['filename'],
+                            'tags': img.get('tags', []),
+                            'reviewed': img.get('reviewed', False)
+                        })
+
+            # 将新图片两两分组
+            for i in range(0, len(new_images), 2):
+                group_images = new_images[i:i+2]
+
+                # 合并tags
+                group_tags = []
+                for img in group_images:
+                    group_tags.extend(img.get('tags', []))
+                group_tags = list(set(group_tags))
+
+                max_group_id += 1
+                new_group = {
+                    'id': max_group_id,
+                    'images': [{'id': img['id'], 'filename': img['filename']} for img in group_images],
+                    'primary_category': '',
+                    'confidence': [],
+                    'attributes': {
+                        '通用特征': {},
+                        '专属特征': {}
+                    },
+                    'tags': group_tags,
+                    'video_description': '',
+                    'reasoning': '',
+                    'reviewed': any(img.get('reviewed', False) for img in group_images),
+                    'modified': False
+                }
+                data['groups'].append(new_group)
+                imported_groups += 1
+
+        else:
+            return jsonify({'error': 'Unsupported JSON format. Expected either "images" array or single group with "output" field'}), 400
+
+        if imported_groups > 0:
+            save_data(data)
+            print(f"成功从文件导入 {imported_groups} 个图片组")
+            return jsonify({
+                'success': True,
+                'message': f'成功导入 {imported_groups} 个图片组',
+                'groups_created': imported_groups
+            })
+        else:
+            return jsonify({'error': 'No valid data to import from file'}), 400
 
     except json.JSONDecodeError:
         return jsonify({'error': 'Invalid JSON format'}), 400

@@ -284,7 +284,7 @@ class ImageTagSystem {
             groupSection.innerHTML = `
                 <div class="group-header">
                     <div class="header-left">
-                        <h2 class="group-title">图片组 ${group.id}</h2>
+                        <h2 class="group-title">${group.task && group.task.uid ? `uid ${group.task.uid}` : `图片组 ${group.id}`}</h2>
                         <div class="group-stats">
                             <span>${group.images.length} 张图片</span>
                             <span>${group.tags ? group.tags.length : 0} 个标签</span>
@@ -293,6 +293,9 @@ class ImageTagSystem {
                     </div>
                     <div class="header-right">
                         ${headerInfoHtml}
+                        <button class="btn btn-danger delete-group-btn" data-group-id="${group.id}" title="删除整个图片组">
+                            🗑️ 删除组
+                        </button>
                     </div>
                 </div>
                 <div class="group-content">
@@ -316,6 +319,7 @@ class ImageTagSystem {
             const deleteBtn = e.target.closest('.delete-btn');
             const editBtn = e.target.closest('.edit-btn');
             const attributeDeleteBtn = e.target.closest('.attribute-delete-btn');
+            const deleteGroupBtn = e.target.closest('.delete-group-btn');
 
             if (deleteBtn) {
                 const tag = deleteBtn.dataset.tag;
@@ -336,6 +340,9 @@ class ImageTagSystem {
                     const tag = attributeTag.dataset.tag;
                     this.deleteTag(groupId, tag);
                 }
+            } else if (deleteGroupBtn) {
+                const groupId = parseInt(deleteGroupBtn.dataset.groupId);
+                this.deleteGroup(groupId);
             }
         });
 
@@ -660,6 +667,79 @@ class ImageTagSystem {
         }
     }
 
+    // ========== 删除整个图片组 ==========
+    async deleteGroup(groupId) {
+        const group = this.groups.find(g => g.id === groupId);
+        if (!group) {
+            this.showToast('图片组不存在', 'error');
+            return;
+        }
+
+        const displayName = group.task && group.task.uid ? `uid ${group.task.uid}` : `图片组 ${groupId}`;
+        const confirmMessage = `确定要删除整个${displayName}吗？\n\n` +
+            `该组包含 ${group.images.length} 张图片，${group.tags ? group.tags.length : 0} 个标签。\n\n` +
+            `注意：图片文件将保留在服务器上，您可以手动删除。`;
+
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        try {
+            console.log(`尝试删除图片组 ${groupId}`);
+            const response = await fetch(`/api/groups/${groupId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            console.log(`响应状态: ${response.status}`);
+            console.log(`响应类型: ${response.headers.get('content-type')}`);
+
+            let result;
+            const contentType = response.headers.get('content-type');
+
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+                console.log('JSON响应结果:', result);
+            } else {
+                // 如果不是JSON，获取文本内容（可能是HTML错误页面）
+                const textContent = await response.text();
+                console.log('文本响应内容:', textContent.substring(0, 200));
+
+                // 尝试解析可能的JSON错误信息
+                try {
+                    result = JSON.parse(textContent);
+                } catch (parseError) {
+                    // 如果无法解析JSON，创建一个错误对象
+                    result = {
+                        error: `服务器错误 (${response.status}): ${response.statusText}`,
+                        details: textContent.substring(0, 100)
+                    };
+                }
+            }
+
+            if (response.ok) {
+                const displayName = group.task && group.task.uid ? `uid ${group.task.uid}` : `图片组 ${groupId}`;
+                this.showToast(`✓ 已删除${displayName}`, 'success');
+
+                // 从本地数据中移除组
+                this.groups = this.groups.filter(g => g.id !== groupId);
+
+                // 重新渲染界面
+                this.renderAllGroups();
+                this.updateStatistics();
+            } else {
+                const errorMessage = result.error || `删除失败 (${response.status})`;
+                this.showToast(`删除失败: ${errorMessage}`, 'error');
+                console.error('删除失败详情:', result);
+            }
+        } catch (error) {
+            this.showToast(`删除图片组失败: ${error.message}`, 'error');
+            console.error('删除错误:', error);
+        }
+    }
+
     // ========== 更新组的标签显示 ==========
     updateGroupTags(groupId, tags) {
         // 更新本地数据
@@ -779,10 +859,18 @@ class ImageTagSystem {
             const result = await response.json();
 
             if (response.ok) {
-                this.showToast(`✓ 成功导入 ${result.imported} 张图片，创建 ${result.groups_created} 个组`, 'success');
-                await this.loadGroups();
-                document.getElementById('importModal').classList.remove('show');
-                document.getElementById('jsonInput').value = '';
+                if (result.success !== false) {
+                    // 成功导入
+                    const message = result.message || `成功导入 ${result.groups_created} 个图片组`;
+                    this.showToast(`✓ ${message}`, 'success');
+                    await this.loadGroups();
+                    document.getElementById('importModal').classList.remove('show');
+                    document.getElementById('jsonInput').value = '';
+                } else {
+                    // 重复UID的情况
+                    this.showToast(`⚠️ ${result.message}`, 'warning');
+                    // 不刷新页面，因为没有新数据导入
+                }
             } else {
                 this.showToast('导入失败: ' + result.error, 'error');
             }
@@ -813,11 +901,22 @@ class ImageTagSystem {
             const result = await response.json();
 
             if (response.ok) {
-                this.showToast(`✓ 成功导入 ${result.imported} 张图片，创建 ${result.groups_created} 个组`, 'success');
-                await this.loadGroups();
-                document.getElementById('importModal').classList.remove('show');
-                fileInput.value = '';
-                document.getElementById('selectedFileName').textContent = '';
+                if (result.success !== false) {
+                    // 成功导入
+                    const message = result.message || `成功导入 ${result.groups_created} 个图片组`;
+                    this.showToast(`✓ ${message}`, 'success');
+                    await this.loadGroups();
+                    document.getElementById('importModal').classList.remove('show');
+                    fileInput.value = '';
+                    document.getElementById('selectedFileName').textContent = '';
+                } else {
+                    // 重复UID的情况
+                    this.showToast(`⚠️ ${result.message}`, 'warning');
+                    // 不刷新页面，因为没有新数据导入
+                    document.getElementById('importModal').classList.remove('show');
+                    fileInput.value = '';
+                    document.getElementById('selectedFileName').textContent = '';
+                }
             } else {
                 this.showToast('导入失败: ' + result.error, 'error');
             }
