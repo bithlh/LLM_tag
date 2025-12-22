@@ -83,30 +83,6 @@
 
             <!-- URL导入内容 -->
             <div id="urlTab" class="tab-content">
-                <div class="url-import-section">
-                    <h3>📥 从JSON文件导入图片组（支持URL）</h3>
-                    <p class="hint">自动下载图片URL并创建图片组，支持完整的标签和属性信息</p>
-                    
-                    <input type="file" id="urlJsonFileInput" accept=".json" style="display: none;">
-                    <button id="selectUrlFileBtn" class="btn btn-secondary">选择JSON文件</button>
-                    <span id="urlFileName" style="margin-left: 10px; color: #666;"></span>
-                    
-                    <div id="urlPreview" class="url-preview" style="display: none; margin-top: 15px;">
-                        <h4>📊 预览信息</h4>
-                        <div id="urlPreviewContent"></div>
-                    </div>
-                    
-                    <button id="importUrlBtn" class="btn btn-primary" style="margin-top: 15px;" disabled>
-                        🚀 开始导入
-                    </button>
-                    
-                    <div id="importProgress" class="import-progress" style="display: none; margin-top: 15px;">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progressFill"></div>
-                        </div>
-                        <p id="progressText">准备中...</p>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
