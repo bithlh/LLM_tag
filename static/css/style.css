@@ -585,6 +585,46 @@ main {
     line-height: 1.6;
 }
 
+/* ========== 文件导入样式 ========== */
+.import-method {
+    margin-bottom: 25px;
+}
+
+.import-method h4 {
+    color: #667eea;
+    margin-bottom: 10px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.import-method .hint {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.path-input-area {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.path-input-area input[type="text"] {
+    flex: 1;
+    min-width: 300px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.path-input-area input[type="text"]:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
 
 /* ========== Toast提示 ========== */
 .toast {

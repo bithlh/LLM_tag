@@ -777,6 +777,187 @@ def import_from_file():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/import/path', methods=['POST'])
+def import_from_path():
+    """从服务器文件路径导入标注数据"""
+    try:
+        data = request.get_json()
+        file_path = data.get('file_path')
+        if not file_path:
+            return jsonify({'error': 'No file path provided'}), 400
+
+        # 安全检查：防止目录遍历攻击
+        if '..' in file_path:
+            return jsonify({'error': 'Invalid file path: ".." is not allowed'}), 400
+
+        # 检查文件是否存在
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+
+        # 检查文件是否可读
+        if not os.access(file_path, os.R_OK):
+            return jsonify({'error': 'File is not readable'}), 403
+
+        # 检查文件扩展名
+        if not (file_path.endswith('.json') or file_path.endswith('.jsonl')):
+            return jsonify({'error': 'Only JSON and JSONL files are allowed'}), 400
+
+        # 检查文件大小（防止内存溢出）
+        file_size = os.path.getsize(file_path)
+        if file_size > 100 * 1024 * 1024:  # 100MB限制
+            return jsonify({'error': 'File too large (max 100MB)'}), 400
+
+        # 读取文件内容
+        with open(file_path, 'r', encoding='utf-8') as f:
+            file_content = f.read()
+
+        # 解析JSON
+        if file_path.endswith('.jsonl'):
+            print(f"检测到JSON Lines格式文件：{file_path}")
+            # 解析JSON Lines格式
+            json_objects = []
+            for line_num, line in enumerate(file_content.strip().split('\n'), 1):
+                line = line.strip()
+                if line:  # 跳过空行
+                    try:
+                        json_obj = json.loads(line)
+                        json_objects.append(json_obj)
+                    except json.JSONDecodeError as e:
+                        return jsonify({'error': f'JSON解析错误在第{line_num}行: {str(e)}'}), 400
+
+            if not json_objects:
+                return jsonify({'error': 'JSONL文件中没有有效的JSON对象'}), 400
+
+            import_data = json_objects  # 对于JSONL，直接使用对象数组
+        else:
+            # 处理单个JSON对象
+            import_data = json.loads(file_content)
+            if not import_data:
+                return jsonify({'error': 'Empty JSON file'}), 400
+
+        # 合并导入的数据
+        data_dict = load_data()
+
+        # 获取当前最大ID
+        max_group_id = max([g['id'] for g in data_dict.get('groups', [])], default=0)
+        max_image_id = 0
+        for group in data_dict.get('groups', []):
+            for img in group.get('images', []):
+                max_image_id = max(max_image_id, img.get('id', 0))
+
+        imported_groups = 0
+
+        # 处理数据：如果是JSON Lines数组，每个元素都是一个图片组对象
+        if isinstance(import_data, list):
+            print(f"处理JSON Lines格式，包含 {len(import_data)} 个对象")
+            max_group_id_ref = [max_group_id]
+            max_image_id_ref = [max_image_id]
+            for item_index, item_data in enumerate(import_data):
+                try:
+                    print(f"处理第 {item_index + 1} 个对象...")
+                    success = process_single_group_item(item_data, data_dict, max_group_id_ref, max_image_id_ref)
+                    if success:
+                        imported_groups += 1
+                except Exception as e:
+                    print(f"处理第 {item_index + 1} 个对象时出错: {str(e)}")
+                    # 继续处理其他对象，不中断整个导入过程
+
+            # 更新外部变量
+            max_group_id = max_group_id_ref[0]
+            max_image_id = max_image_id_ref[0]
+
+        # 检查数据格式：如果是example.json格式的单个图片组
+        elif 'output' in import_data and 'task' in import_data:
+            print("检测到example.json格式的文件数据")
+            max_group_id_ref = [max_group_id]
+            max_image_id_ref = [max_image_id]
+            success = process_single_group_item(import_data, data_dict, max_group_id_ref, max_image_id_ref)
+            if success:
+                imported_groups += 1
+                max_group_id = max_group_id_ref[0]
+                max_image_id = max_image_id_ref[0]
+
+        # 检查是否是原来的images数组格式
+        elif 'images' in import_data:
+            print("检测到传统images数组格式的文件数据")
+            # 收集现有图片ID
+            existing_image_ids = set()
+            for group in data_dict.get('groups', []):
+                for img in group.get('images', []):
+                    existing_image_ids.add(img['id'])
+
+            # 收集需要导入的图片
+            new_images = []
+            for img in import_data['images']:
+                if 'filename' in img:
+                    if img.get('id') and img['id'] not in existing_image_ids:
+                        new_images.append({
+                            'id': img['id'],
+                            'filename': img['filename'],
+                            'tags': img.get('tags', []),
+                            'reviewed': img.get('reviewed', False)
+                        })
+                    elif not img.get('id'):
+                        max_image_id += 1
+                        new_images.append({
+                            'id': max_image_id,
+                            'filename': img['filename'],
+                            'tags': img.get('tags', []),
+                            'reviewed': img.get('reviewed', False)
+                        })
+
+            # 将新图片两两分组
+            for i in range(0, len(new_images), 2):
+                group_images = new_images[i:i+2]
+
+                # 合并tags
+                group_tags = []
+                for img in group_images:
+                    group_tags.extend(img.get('tags', []))
+                group_tags = list(set(group_tags))  # 去重
+
+                max_group_id += 1
+                new_group = {
+                    'id': max_group_id,
+                    'images': [{'id': img['id'], 'filename': img['filename']} for img in group_images],
+                    'primary_category': '',
+                    'confidence': [],
+                    'attributes': {
+                        '通用特征': {},
+                        '专属特征': {}
+                    },
+                    'tags': group_tags,
+                    'video_description': '',
+                    'reasoning': '',
+                    'reviewed': any(img.get('reviewed', False) for img in group_images),
+                    'modified': False
+                }
+                data_dict['groups'].append(new_group)
+                imported_groups += 1
+
+        else:
+            return jsonify({'error': 'Unsupported JSON format. Expected either "images" array or single group with "output" field'}), 400
+
+        if imported_groups > 0:
+            save_data(data_dict)
+            print(f"成功从路径 {file_path} 导入 {imported_groups} 个图片组")
+            return jsonify({
+                'success': True,
+                'message': f'成功从路径导入 {imported_groups} 个图片组',
+                'groups_created': imported_groups,
+                'file_path': file_path
+            })
+        else:
+            return jsonify({'error': 'No valid data to import from path'}), 400
+
+    except json.JSONDecodeError:
+        return jsonify({'error': 'Invalid JSON format'}), 400
+    except Exception as e:
+        print(f"路径导入失败：{str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'服务器内部错误: {str(e)}'}), 500
+
 
 # ========== 路由：文件上传 ==========
 @app.route('/api/upload', methods=['POST'])

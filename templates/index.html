@@ -73,12 +73,32 @@
 
             <!-- 文件导入内容 -->
             <div id="fileTab" class="tab-content">
-                <div class="file-upload-area">
-                    <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
-                    <button id="selectFileBtn" class="btn btn-secondary">选择JSON文件</button>
-                    <span id="selectedFileName" style="margin-left: 10px;"></span>
+                <!-- 文件选择方式 -->
+                <div class="import-method">
+                    <h4>方式1：本地文件选择</h4>
+                    <div class="file-upload-area">
+                        <input type="file" id="jsonFileInput" accept=".json,.jsonl" style="display: none;">
+                        <button id="selectFileBtn" class="btn btn-secondary">选择JSON文件</button>
+                        <span id="selectedFileName" style="margin-left: 10px;"></span>
+                    </div>
+                    <button id="importFileBtn" class="btn btn-primary" style="margin-top: 15px;">上传并导入</button>
                 </div>
-                <button id="importFileBtn" class="btn btn-primary" style="margin-top: 15px;">导入文件</button>
+
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+
+                <!-- 文件路径方式 -->
+                <div class="import-method">
+                    <h4>方式2：服务器文件路径</h4>
+                    <p class="hint">输入服务器上JSON文件的完整路径（适用于Linux服务器环境）</p>
+                    <div class="path-input-area">
+                        <input type="text" id="filePathInput" placeholder="/path/to/your/file.json 或 ./data/file.jsonl"
+                               style="width: 400px; padding: 8px; margin-right: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <button id="importPathBtn" class="btn btn-primary">从路径导入</button>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <small style="color: #666;">支持格式：.json, .jsonl | 例如：/home/user/data.json 或 ./backup.jsonl</small>
+                    </div>
+                </div>
             </div>
 
             <!-- URL导入内容 -->

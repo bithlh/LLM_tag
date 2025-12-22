@@ -499,6 +499,11 @@ class ImageTagSystem {
         document.getElementById('importFileBtn').addEventListener('click', () => {
             this.importFromFile();
         });
+
+        // 文件路径导入
+        document.getElementById('importPathBtn').addEventListener('click', () => {
+            this.importFromPath();
+        });
     }
 
     // ========== 绑定分页事件 ==========
@@ -864,6 +869,55 @@ class ImageTagSystem {
                     document.getElementById('importModal').classList.remove('show');
                     fileInput.value = '';
                     document.getElementById('selectedFileName').textContent = '';
+                }
+            } else {
+                this.showToast('导入失败: ' + result.error, 'error');
+            }
+        } catch (error) {
+            this.showToast('导入失败: ' + error.message, 'error');
+        }
+    }
+
+    // ========== 从文件路径导入 ==========
+    async importFromPath() {
+        const filePathInput = document.getElementById('filePathInput');
+        const filePath = filePathInput.value.trim();
+
+        if (!filePath) {
+            this.showToast('请输入文件路径', 'warning');
+            return;
+        }
+
+        // 验证路径格式
+        if (filePath.includes('..')) {
+            this.showToast('文件路径不能包含 ".." 以防止安全风险', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/import/path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_path: filePath })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                if (result.success !== false) {
+                    // 成功导入
+                    const message = result.message || `成功从路径导入 ${result.groups_created} 个图片组`;
+                    this.showToast(`✓ ${message}`, 'success');
+                    await this.loadGroups();
+                    // 滚动到页面顶部
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    document.getElementById('importModal').classList.remove('show');
+                    filePathInput.value = '';
+                } else {
+                    // 重复UID的情况
+                    this.showToast(`⚠️ ${result.message}`, 'warning');
+                    document.getElementById('importModal').classList.remove('show');
+                    filePathInput.value = '';
                 }
             } else {
                 this.showToast('导入失败: ' + result.error, 'error');
