@@ -100,15 +100,18 @@ class ImageTagSystem {
                 // 检查是否有URL字段（远程图片）或filename字段（本地图片）
                 const imageSrc = img.url ? img.url : `/static/images/${img.filename}`;
                 const imageAlt = img.url ? `远程图片 ${img.type || 'unknown'}` : img.filename;
-                const imageLabel = img.url ? `${img.type || '远程图片'}` : img.filename;
+                const imageLabel = img.url ? `${img.url.split('/').pop()}` : img.filename;
+
+                // 添加图片类型的标识
+                const imageTypeBadge = img.type ? `<div class="image-type-badge image-type-${img.type}">${img.type.toUpperCase()}</div>` : '';
 
                 imagesHtml += `
                     <div class="group-image-item">
+                        ${imageTypeBadge}
                         <img src="${imageSrc}"
                              alt="${imageAlt}"
                              onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2220%22%3E图片加载失败%3C/text%3E%3C/svg%3E'"
                              loading="lazy">
-                        <div class="image-filename">${imageLabel}</div>
                     </div>
                 `;
             });
