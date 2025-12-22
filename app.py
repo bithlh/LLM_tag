@@ -142,10 +142,44 @@ def index():
 # ========== 路由：获取数据 ==========
 @app.route('/api/groups', methods=['GET'])
 def get_groups():
-    """获取所有图片组和标签信息"""
+    """获取图片组和标签信息，支持分页"""
     scan_and_add_images()
     data = load_data()
-    return jsonify(data)
+
+    # 获取分页参数
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 10))
+
+    # 确保参数合理
+    if page < 1:
+        page = 1
+    if per_page < 1 or per_page > 100:
+        per_page = 10
+
+    groups = data.get('groups', [])
+    total_groups = len(groups)
+
+    # 计算分页
+    start_index = (page - 1) * per_page
+    end_index = start_index + per_page
+
+    # 获取当前页的数据
+    paginated_groups = groups[start_index:end_index]
+
+    # 构建响应
+    response = {
+        'groups': paginated_groups,
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total_groups': total_groups,
+            'total_pages': (total_groups + per_page - 1) // per_page,
+            'has_next': end_index < total_groups,
+            'has_prev': page > 1
+        }
+    }
+
+    return jsonify(response)
 
 
 @app.route('/api/groups/<int:group_id>', methods=['GET'])
@@ -938,6 +972,27 @@ def get_statistics():
         'modified_groups': modified_groups,
         'total_tags': total_tags,
         'tag_distribution': tag_distribution
+    })
+
+
+@app.route('/api/groups/stats', methods=['GET'])
+def get_groups_stats():
+    """获取图片组分页统计信息"""
+    scan_and_add_images()
+    data = load_data()
+    groups = data.get('groups', [])
+
+    per_page = int(request.args.get('per_page', 10))
+    if per_page < 1 or per_page > 100:
+        per_page = 10
+
+    total_groups = len(groups)
+    total_pages = (total_groups + per_page - 1) // per_page
+
+    return jsonify({
+        'total_groups': total_groups,
+        'total_pages': total_pages,
+        'per_page': per_page
     })
 
 

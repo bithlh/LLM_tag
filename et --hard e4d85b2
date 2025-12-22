@@ -1,0 +1,41 @@
+[33mcommit e4d85b2d4ede05bc4f6897023acc9c1a34ce5090[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: bithlh <615680735@qq.com>
+Date:   Mon Dec 22 10:33:06 2025 +0800
+
+    json文件导入 ok
+
+[33mcommit 6c63e78a2dc71496e006816429a4ec295c206c06[m
+Author: bithlh <615680735@qq.com>
+Date:   Fri Dec 19 18:15:57 2025 +0800
+
+    支持远程url图片显示,且适配例子信息的显示,json导入不行
+
+[33mcommit 85904c6e07e5936f0fe728b6ef392637656357a2[m
+Author: bithlh <615680735@qq.com>
+Date:   Fri Dec 19 17:29:20 2025 +0800
+
+    图片ok,标签ok,导入json 不行
+
+[33mcommit 3b4998ed334e9ac9267d6e998a08fb002f1ffa2a[m
+Author: bithlh <615680735@qq.com>
+Date:   Thu Dec 18 17:23:12 2025 +0800
+
+    双照片上下显示(已铺满)标签显示需要修改
+
+[33mcommit f17077243e42c3063cc9f6aacff86ab023883fc9[m
+Author: bithlh <615680735@qq.com>
+Date:   Thu Dec 18 16:40:17 2025 +0800
+
+    双照片显示(没铺满)
+
+[33mcommit 84c2e7f8d8805f483a94521f55fcbf9f2302a286[m
+Author: bithlh <615680735@qq.com>
+Date:   Thu Dec 18 11:33:03 2025 +0800
+
+    初版
+
+[33mcommit 7ab3a92891070f53e690943af9470f2343e0cc98[m
+Author: bithlh <615680735@qq.com>
+Date:   Wed Dec 17 18:13:01 2025 +0800
+
+    origin

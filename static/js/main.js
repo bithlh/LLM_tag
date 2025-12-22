@@ -6,8 +6,16 @@
 class ImageTagSystem {
     constructor() {
         this.groups = [];
+        this.allGroups = []; // 存储所有组，用于筛选
         this.currentFilter = 'all';
         this.pendingImportData = null;
+
+        // 分页相关属性
+        this.currentPage = 1;
+        this.perPage = 10;
+        this.totalPages = 1;
+        this.totalGroups = 0;
+
         this.init();
     }
 
@@ -21,12 +29,24 @@ class ImageTagSystem {
     }
 
     // ========== 数据加载 ==========
-    async loadGroups() {
+    async loadGroups(page = 1) {
         try {
-            const response = await fetch('/api/groups');
+            // 加载分页数据
+            const response = await fetch(`/api/groups?page=${page}&per_page=${this.perPage}`);
             const data = await response.json();
+
             this.groups = data.groups || [];
+            this.currentPage = data.pagination.page;
+            this.totalPages = data.pagination.total_pages;
+            this.totalGroups = data.pagination.total_groups;
+
+            // 加载所有数据用于筛选（如果还没有加载）
+            if (this.allGroups.length === 0 && this.totalGroups <= 1000) {
+                await this.loadAllGroupsForFiltering();
+            }
+
             this.renderAllGroups();
+            this.updatePaginationControls();
             this.updateStatistics();
         } catch (error) {
             this.showToast('加载图片组失败: ' + error.message, 'error');
@@ -34,17 +54,23 @@ class ImageTagSystem {
         }
     }
 
+    // 加载所有数据用于筛选
+    async loadAllGroupsForFiltering() {
+        try {
+            const response = await fetch('/api/groups?per_page=1000');
+            const data = await response.json();
+            this.allGroups = data.groups || [];
+        } catch (error) {
+            console.warn('加载全部数据用于筛选失败:', error);
+            this.allGroups = this.groups; // 降级使用当前页数据
+        }
+    }
+
     // ========== 渲染所有组 ==========
     renderAllGroups() {
         const container = document.getElementById('groupsContent');
 
-        // 根据筛选条件过滤组
-        let filteredGroups = this.groups;
-        if (this.currentFilter === 'modified') {
-            filteredGroups = this.groups.filter(group => group.modified);
-        }
-
-        if (filteredGroups.length === 0) {
+        if (this.groups.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <p>📂 暂无图片组</p>
@@ -55,7 +81,7 @@ class ImageTagSystem {
         }
 
         container.innerHTML = '';
-        filteredGroups.forEach(group => {
+        this.groups.forEach(group => {
             const groupSection = document.createElement('div');
             groupSection.className = `group-section ${group.modified ? 'modified' : ''} ${group.id === 1 ? 'group-template' : ''}`;
             groupSection.dataset.groupId = group.id;
@@ -312,6 +338,59 @@ class ImageTagSystem {
         });
     }
 
+    // ========== 分页控制 ==========
+    updatePaginationControls() {
+        const container = document.getElementById('paginationContainer');
+        const info = document.getElementById('paginationInfo');
+        const totalPages = document.getElementById('totalPages');
+        const currentPageInput = document.getElementById('currentPageInput');
+
+        // 显示分页控件
+        container.style.display = this.totalPages > 1 ? 'flex' : 'none';
+
+        if (this.totalPages <= 1) return;
+
+        // 更新分页信息
+        const start = (this.currentPage - 1) * this.perPage + 1;
+        const end = Math.min(this.currentPage * this.perPage, this.totalGroups);
+        info.textContent = `显示 ${start}-${end} 条，共 ${this.totalGroups} 条记录`;
+
+        // 更新页码信息
+        totalPages.textContent = this.totalPages;
+        currentPageInput.value = this.currentPage;
+        currentPageInput.max = this.totalPages;
+
+        // 更新按钮状态
+        this.updatePaginationButtons();
+    }
+
+    updatePaginationButtons() {
+        const firstBtn = document.getElementById('firstPageBtn');
+        const prevBtn = document.getElementById('prevPageBtn');
+        const nextBtn = document.getElementById('nextPageBtn');
+        const lastBtn = document.getElementById('lastPageBtn');
+
+        firstBtn.disabled = this.currentPage <= 1;
+        prevBtn.disabled = this.currentPage <= 1;
+        nextBtn.disabled = this.currentPage >= this.totalPages;
+        lastBtn.disabled = this.currentPage >= this.totalPages;
+    }
+
+    async goToPage(page) {
+        if (page < 1 || page > this.totalPages || page === this.currentPage) return;
+        await this.loadGroups(page);
+        // 滚动到页面顶部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async changePerPage(newPerPage) {
+        this.perPage = parseInt(newPerPage);
+        this.currentPage = 1; // 重置到第一页
+        await this.loadGroups(1);
+        // 滚动到页面顶部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     // ========== 事件绑定 ==========
     bindEvents() {
         // 标签容器事件委托 - 处理所有组的标签操作
@@ -384,6 +463,9 @@ class ImageTagSystem {
             });
         }
 
+        // 分页相关事件
+        this.bindPaginationEvents();
+
         // 导入标签页切换
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -414,6 +496,52 @@ class ImageTagSystem {
 
         document.getElementById('importFileBtn').addEventListener('click', () => {
             this.importFromFile();
+        });
+    }
+
+    // ========== 绑定分页事件 ==========
+    bindPaginationEvents() {
+        // 首页
+        document.getElementById('firstPageBtn').addEventListener('click', () => {
+            this.goToPage(1);
+        });
+
+        // 上一页
+        document.getElementById('prevPageBtn').addEventListener('click', () => {
+            this.goToPage(this.currentPage - 1);
+        });
+
+        // 下一页
+        document.getElementById('nextPageBtn').addEventListener('click', () => {
+            this.goToPage(this.currentPage + 1);
+        });
+
+        // 末页
+        document.getElementById('lastPageBtn').addEventListener('click', () => {
+            this.goToPage(this.totalPages);
+        });
+
+        // 页码输入框
+        const currentPageInput = document.getElementById('currentPageInput');
+        currentPageInput.addEventListener('change', (e) => {
+            const page = parseInt(e.target.value);
+            if (page >= 1 && page <= this.totalPages) {
+                this.goToPage(page);
+            } else {
+                // 恢复原值
+                e.target.value = this.currentPage;
+            }
+        });
+
+        currentPageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.target.blur(); // 触发change事件
+            }
+        });
+
+        // 每页显示数量选择
+        document.getElementById('perPageSelect').addEventListener('change', (e) => {
+            this.changePerPage(e.target.value);
         });
     }
 
@@ -582,6 +710,8 @@ class ImageTagSystem {
                 }
 
                 await this.loadGroups();
+                // 滚动到页面顶部
+                window.scrollTo({ top: 0, behavior: 'smooth' });
                 document.getElementById('importModal').classList.remove('show');
                 
                 // 重置状态
@@ -729,6 +859,8 @@ class ImageTagSystem {
                 // 重新渲染界面
                 this.renderAllGroups();
                 this.updateStatistics();
+                // 滚动到页面顶部
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
                 const errorMessage = result.error || `删除失败 (${response.status})`;
                 this.showToast(`删除失败: ${errorMessage}`, 'error');
@@ -834,8 +966,7 @@ class ImageTagSystem {
 
     // ========== 更新统计信息 ==========
     updateStatistics() {
-        const total = this.groups.length;
-        document.getElementById('totalCount').textContent = total;
+        document.getElementById('totalCount').textContent = this.totalGroups;
     }
 
     // ========== 从JSON导入 ==========
@@ -864,6 +995,8 @@ class ImageTagSystem {
                     const message = result.message || `成功导入 ${result.groups_created} 个图片组`;
                     this.showToast(`✓ ${message}`, 'success');
                     await this.loadGroups();
+                    // 滚动到页面顶部
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                     document.getElementById('importModal').classList.remove('show');
                     document.getElementById('jsonInput').value = '';
                 } else {
@@ -906,6 +1039,8 @@ class ImageTagSystem {
                     const message = result.message || `成功导入 ${result.groups_created} 个图片组`;
                     this.showToast(`✓ ${message}`, 'success');
                     await this.loadGroups();
+                    // 滚动到页面顶部
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                     document.getElementById('importModal').classList.remove('show');
                     fileInput.value = '';
                     document.getElementById('selectedFileName').textContent = '';

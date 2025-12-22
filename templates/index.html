@@ -23,6 +23,32 @@
                     <p class="placeholder">加载中...</p>
                 </div>
             </div>
+
+            <!-- 分页控件 -->
+            <div id="paginationContainer" class="pagination-container" style="display: none;">
+                <div class="pagination-info">
+                    <span id="paginationInfo">显示 1-10 条，共 0 条记录</span>
+                    <div class="per-page-selector">
+                        <label for="perPageSelect">每页显示：</label>
+                        <select id="perPageSelect">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="pagination-controls">
+                    <button id="firstPageBtn" class="btn btn-secondary pagination-btn" disabled>首页</button>
+                    <button id="prevPageBtn" class="btn btn-secondary pagination-btn" disabled>上一页</button>
+                    <span class="page-info">
+                        第 <input type="number" id="currentPageInput" min="1" value="1" class="page-input"> 页
+                        / 共 <span id="totalPages">1</span> 页
+                    </span>
+                    <button id="nextPageBtn" class="btn btn-secondary pagination-btn" disabled>下一页</button>
+                    <button id="lastPageBtn" class="btn btn-secondary pagination-btn" disabled>末页</button>
+                </div>
+            </div>
         </main>
     </div>
 
