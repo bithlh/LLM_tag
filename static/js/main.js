@@ -457,6 +457,14 @@ class ImageTagSystem {
             });
         }
 
+        // JSONL格式导出按钮
+        const exportJsonlBtn = document.getElementById('exportJsonlBtn');
+        if (exportJsonlBtn) {
+            exportJsonlBtn.addEventListener('click', () => {
+                this.exportAsJsonl();
+            });
+        }
+
         // 导入按钮
         const importBtn = document.getElementById('importBtn');
         if (importBtn) {
@@ -946,6 +954,30 @@ class ImageTagSystem {
 
             URL.revokeObjectURL(url);
             this.showToast('✓ 数据导出成功！', 'success');
+        } catch (error) {
+            console.error('导出错误:', error);
+            this.showToast('导出失败: ' + error.message, 'error');
+        }
+    }
+
+    // 导出为JSON Lines格式（标准格式）
+    async exportAsJsonl() {
+        try {
+            const response = await fetch('/api/export/jsonl');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `processed_results_${new Date().toISOString().slice(0,10)}.jsonl`;
+            a.click();
+
+            URL.revokeObjectURL(url);
+            this.showToast('✓ 标准格式数据导出成功！', 'success');
         } catch (error) {
             console.error('导出错误:', error);
             this.showToast('导出失败: ' + error.message, 'error');

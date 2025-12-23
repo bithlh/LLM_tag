@@ -377,6 +377,101 @@ def export_data():
     return jsonify(data)
 
 
+@app.route('/api/export/jsonl', methods=['GET'])
+def export_jsonl():
+    """导出为JSON Lines格式（每行一个完整的处理结果）"""
+    data = load_data()
+    groups = data.get('groups', [])
+
+    # 转换为JSON Lines格式
+    json_lines = []
+
+    for group in groups:
+        # 检查是否是完整的处理结果（有task字段）
+        if 'task' not in group:
+            continue
+
+        # 构建输出格式
+        output_obj = {
+            "task": group.get("task", {}),
+            "provider": group.get("provider", ""),
+            "model": group.get("model", ""),
+            "timestamp": group.get("timestamp", ""),
+            "elapsed_seconds": group.get("elapsed_seconds", 0),
+            "output": {
+                "primary_category": group.get("primary_category", ""),
+                "confidence": group.get("confidence", []),
+                "attributes": group.get("attributes", {
+                    "通用特征": {},
+                    "专属特征": {}
+                }),
+                "tags": group.get("tags", []),
+                "video_description": group.get("video_description", ""),
+                "reasoning": group.get("reasoning", ""),
+                "push_title": group.get("push_title", ""),
+                "封面图包含文字": group.get("封面图包含文字", ""),
+                "直播图包含文字": group.get("直播图包含文字", "")
+            }
+        }
+
+        # 如果有usage字段，也包含进去
+        if "usage" in group:
+            output_obj["usage"] = group["usage"]
+
+        json_lines.append(json.dumps(output_obj, ensure_ascii=False))
+
+    # 返回JSON Lines格式
+    response = Response(
+        "\n".join(json_lines),
+        mimetype='application/json'
+    )
+    response.headers['Content-Disposition'] = 'attachment; filename=processed_results.jsonl'
+    return response
+
+
+@app.route('/api/export/single/<int:group_id>', methods=['GET'])
+def export_single_group(group_id):
+    """导出单个图片组为完整格式"""
+    data = load_data()
+
+    for group in data.get('groups', []):
+        if group['id'] == group_id and 'task' in group:
+            # 构建完整的输出对象
+            output_obj = {
+                "task": group.get("task", {}),
+                "provider": group.get("provider", ""),
+                "model": group.get("model", ""),
+                "timestamp": group.get("timestamp", ""),
+                "elapsed_seconds": group.get("elapsed_seconds", 0),
+                "output": {
+                    "primary_category": group.get("primary_category", ""),
+                    "confidence": group.get("confidence", []),
+                    "attributes": group.get("attributes", {
+                        "通用特征": {},
+                        "专属特征": {}
+                    }),
+                    "tags": group.get("tags", []),
+                    "video_description": group.get("video_description", ""),
+                    "reasoning": group.get("reasoning", ""),
+                    "push_title": group.get("push_title", ""),
+                    "封面图包含文字": group.get("封面图包含文字", ""),
+                    "直播图包含文字": group.get("直播图包含文字", "")
+                }
+            }
+
+            if "usage" in group:
+                output_obj["usage"] = group["usage"]
+
+            response = Response(
+                json.dumps(output_obj, ensure_ascii=False, indent=2),
+                mimetype='application/json'
+            )
+            response.headers['Content-Disposition'] = f'attachment; filename=group_{group_id}_processed.json'
+            return response
+
+    return jsonify({'error': 'Group not found or not processed'}), 404
+
+
 @app.route('/api/import', methods=['POST'])
 def import_data():
     """导入JSON数据并自动分组"""
