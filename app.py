@@ -12,6 +12,9 @@ from werkzeug.utils import secure_filename
 import requests
 import uuid
 import time
+import threading
+import tempfile
+import portalocker
 
 app = Flask(__name__)
 
@@ -59,7 +62,9 @@ def scan_and_add_images():
         existing_filenames = set()
         for group in data.get('groups', []):
             for img in group.get('images', []):
-                existing_filenames.add(img['filename'])
+                # 只处理本地文件类型的图片
+                if 'filename' in img:
+                    existing_filenames.add(img['filename'])
 
         # 获取当前最大ID
         max_id = 0
@@ -106,30 +111,46 @@ def scan_and_add_images():
         # 保存更新后的数据
         if new_groups_added > 0:
             save_data(data)
-            print(f"✓ 自动添加了 {len(new_files)} 张新图片，组成 {new_groups_added} 个新组")
+            print(f"[OK] Auto-added {len(new_files)} new images, created {new_groups_added} new groups")
 
     except Exception as e:
-        print(f"✗ 扫描图片目录时出错: {e}")
+        print(f"[ERROR] Error scanning image directory: {e}")
 
 
 def load_data():
-    """加载标注数据"""
+    """加载标注数据（带文件锁保护）"""
     try:
+        # 使用文件锁确保并发安全
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            portalocker.lock(f, portalocker.LOCK_SH)  # 共享锁用于读取
             data = json.load(f)
-            # 确保数据结构兼容
-            if 'groups' not in data:
-                data['groups'] = []
-            return data
+            portalocker.unlock(f)
+
+        # 确保数据结构兼容
+        if 'groups' not in data:
+            data['groups'] = []
+        return data
     except FileNotFoundError:
         init_sample_data()
+        return load_data()
+    except portalocker.LockException:
+        # 如果锁失败，等待一小段时间后重试
+        time.sleep(0.1)
         return load_data()
 
 
 def save_data(data):
-    """保存标注数据"""
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    """保存标注数据（带文件锁保护）"""
+    try:
+        # 使用文件锁确保并发安全
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            portalocker.lock(f, portalocker.LOCK_EX)  # 独占锁用于写入
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            portalocker.unlock(f)
+    except portalocker.LockException:
+        # 如果锁失败，等待一小段时间后重试
+        time.sleep(0.1)
+        save_data(data)
 
 
 # ========== 路由：页面渲染 ==========
@@ -1198,20 +1219,35 @@ def batch_replace_tag():
 
 
 # ========== 主程序入口 ==========
-if __name__ == '__main__':
-    print("=" * 60)
-    print("🚀 图片标签筛选系统启动中...")
-    print("=" * 60)
-    
+def create_app():
+    """应用工厂函数，用于生产环境部署"""
+    # 初始化数据
     init_sample_data()
     scan_and_add_images()
-    
-    print("✓ 数据初始化完成")
-    print("✓ 服务器地址: http://127.0.0.1:5000")
+
+    print("[OK] Data initialization completed")
+    return app
+
+
+if __name__ == '__main__':
     print("=" * 60)
-    
+    print("Starting Image Tag Filtering System...")
+    print("=" * 60)
+
+    app = create_app()
+
+    print("[OK] Server address: http://127.0.0.1:5000")
+    print("=" * 60)
+
     # 禁用SSL验证警告（如果需要）
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    
-    app.run(debug=True, host='127.0.0.1', port=5000)
+
+    # 生产环境配置
+    app.run(
+        debug=False,  # 生产环境关闭调试模式
+        host='0.0.0.0',  # 监听所有接口
+        port=int(os.environ.get('PORT', 5000)),
+        threaded=True,  # 启用线程处理并发请求
+        processes=1  # 单进程模式，与gunicorn配置保持一致
+    )
