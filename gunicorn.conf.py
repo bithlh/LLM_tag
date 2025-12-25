@@ -2,7 +2,7 @@
 import multiprocessing
 
 # 服务器配置
-bind = "0.0.0.0:8000"
+bind = "127.0.0.1:5000"
 backlog = 2048
 
 # 工作进程配置
@@ -31,4 +31,4 @@ pidfile = "logs/gunicorn.pid"
 
 # 应用配置
 pythonpath = "."  # 当前目录
-wsgi_module = "app:create_app"
+wsgi_module = "app:app"
